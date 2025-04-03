@@ -14,8 +14,12 @@ import src.ca.lwi.trqcbot.utils.TeamSelectionResult;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.awt.image.BufferedImageOp;
+import java.awt.image.ConvolveOp;
+import java.awt.image.Kernel;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,7 +39,7 @@ public class WelcomeMessageHandler {
         this.teamsCollection = Main.getMongoConnection().getDatabase().getCollection("teams");
         this.draftHistoryCollection = Main.getMongoConnection().getDatabase().getCollection("draft_history");
         this.random = new Random();
-        this.tradeChance = 100;
+        this.tradeChance = 5;
     }
 
     public void createMessage(Guild guild, Member member) {
@@ -260,7 +264,11 @@ public class WelcomeMessageHandler {
         // Rectangle semi-transparent derrière le nom de l'équipe
         Color semiTransparentBg = new Color(0, 0, 0, 150); // Noir semi-transparent
         g.setColor(semiTransparentBg);
-        g.fillRoundRect(textX - 10, textY - 70 - teamNameHeight + 5, teamNameWidth + 20, teamNameHeight + 5, 10, 10);
+
+        // Hauteur ajustée pour le rectangle du nom d'équipe
+        int teamBoxHeight = teamNameHeight + 10; // +10 pour le padding
+        int teamBoxY = textY - 70 - teamNameHeight;
+        g.fillRoundRect(textX - 10, teamBoxY, teamNameWidth + 20, teamBoxHeight, 10, 10);
 
         // Dessiner le nom de l'équipe
         g.setFont(teamFont);
@@ -269,45 +277,130 @@ public class WelcomeMessageHandler {
 
         // Ajouter l'information sur l'équipe d'origine sous le nom de l'équipe
         if (originalTeam != null && !originalTeam.isEmpty()) {
-            int originalLogoSize = 40;
+            int originalLogoSize = 30; // Légèrement plus petit pour mieux s'adapter à la hauteur de la boîte
             int teamTextEndX = textX + teamNameWidth;
+            int additionalSpace = 15; // Espace supplémentaire en pixels
+            int arrowX = teamTextEndX + 15 + additionalSpace;
+            int arrowWidth = 40; // Largeur de la flèche dessinée
+            int boxWidth = arrowWidth + 20 + originalLogoSize + additionalSpace;
 
-            // Dessiner la flèche
-            Font arrowFont = new Font("Arial", Font.BOLD, 30);
-            g.setFont(arrowFont);
-            String arrowSymbol = "→";
-
-            FontMetrics arrowMetrics = g.getFontMetrics();
-            int arrowWidth = arrowMetrics.stringWidth(arrowSymbol);
-            int arrowX = teamTextEndX + 15;
-
-            int boxWidth = arrowWidth + 10 + originalLogoSize + 15;
-            int boxHeight = Math.max(40, originalLogoSize + 10);
-
-            // Rectangle semi-transparent derrière la flèche
+            // Rectangle semi-transparent derrière la flèche et le logo
             g.setColor(semiTransparentBg);
-            g.fillRoundRect(arrowX - 5, textY - 95, boxWidth, boxHeight, 10, 10);
+            g.fillRoundRect(arrowX - 5, teamBoxY, boxWidth, teamBoxHeight, 10, 10);
 
-            // Dessiner la flèche
+            // Centre vertical de la boîte pour aligner les flèches et le logo
+            int centerY = teamBoxY + teamBoxHeight /2;
+
+            // Utiliser un symbole Unicode pour la flèche bidirectionnelle au lieu de la dessiner
+            Font arrowFont = new Font("Arial Unicode MS", Font.BOLD, 24);
+            g.setFont(arrowFont);
             g.setColor(Color.GRAY);
-            g.drawString(arrowSymbol, arrowX, textY - 70);
+            FontMetrics arrowMetrics = g.getFontMetrics();
+            String arrowSymbol = "⇆"; // Symbole Unicode ⇆
+            int arrowSymbolWidth = arrowMetrics.stringWidth(arrowSymbol);
+            // Centrer le symbole dans l'espace alloué
+            int arrowSymbolX = arrowX + (arrowWidth - arrowSymbolWidth) / 2;
+            // Ajuster verticalement pour centrer le symbole
+            int arrowSymbolY = centerY + arrowMetrics.getAscent()/2 - 2;
+            g.drawString(arrowSymbol, arrowSymbolX, arrowSymbolY);
 
-            // Charger et dessiner le logo de l'équipe d'origine
+            // Solution complète pour le logo d'échange
             try {
                 // Position du logo (après la flèche)
-                int originalLogoX = arrowX + arrowWidth + 15;
-                int originalLogoY = textY - 95 + (boxHeight - originalLogoSize) / 2; // centré verticalement
+                int originalLogoX = arrowX + arrowWidth + 5;
+                int originalLogoY = teamBoxY + (teamBoxHeight - originalLogoSize) / 2;
 
-                // Charger et dessiner le logo
-                BufferedImage originalLogo = ImageIO.read(new URL(originalTeam));
-                g.drawImage(originalLogo, originalLogoX, originalLogoY, originalLogoSize, originalLogoSize, null);
+                // Correction de la position verticale - déplacer légèrement vers le bas
+                int verticalAdjustment = 1; // Déplacer de 1px vers le bas
+                originalLogoY += verticalAdjustment;
+
+                // Taille optimisée du logo
+                int maxLogoSize = teamBoxHeight - 8; // Réduire légèrement pour mieux s'adapter
+                int displaySize = Math.min(originalLogoSize, maxLogoSize);
+
+                // Chargement optimisé
+                URL originalLogoUrl = new URL(originalTeam);
+                HttpURLConnection connection = (HttpURLConnection) originalLogoUrl.openConnection();
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0");
+                connection.setDoInput(true);
+                connection.setConnectTimeout(5000);
+
+                // Chargement avec support de transparence
+                BufferedImage originalLogo = ImageIO.read(connection.getInputStream());
+
+                // Création d'une image avec canal alpha (transparence)
+                BufferedImage transparentLogo = new BufferedImage(
+                        originalLogo.getWidth(),
+                        originalLogo.getHeight(),
+                        BufferedImage.TYPE_INT_ARGB
+                );
+
+                // Copier l'image originale en remplaçant le blanc par de la transparence
+                for (int y = 0; y < originalLogo.getHeight(); y++) {
+                    for (int x = 0; x < originalLogo.getWidth(); x++) {
+                        int rgb = originalLogo.getRGB(x, y);
+                        Color pixelColor = new Color(rgb, true);
+
+                        // Si le pixel est blanc ou presque blanc, le rendre transparent
+                        if (pixelColor.getRed() > 240 && pixelColor.getGreen() > 240 && pixelColor.getBlue() > 240) {
+                            transparentLogo.setRGB(x, y, new Color(0, 0, 0, 0).getRGB());
+                        } else {
+                            transparentLogo.setRGB(x, y, rgb);
+                        }
+                    }
+                }
+
+                // Utiliser l'image avec transparence à la place de l'originale
+                originalLogo = transparentLogo;
+
+                // Prétraitement pour optimiser la qualité
+                // Utiliser une technique de suréchantillonnage (oversampling)
+                int oversampleFactor = 4;
+                int workSize = displaySize * oversampleFactor;
+
+                BufferedImage workImage = new BufferedImage(workSize, workSize, BufferedImage.TYPE_INT_ARGB);
+                Graphics2D workG = workImage.createGraphics();
+
+                // Qualité maximale
+                workG.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                workG.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                workG.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                workG.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
+
+                // Dessiner en grand pour ensuite réduire
+                workG.drawImage(originalLogo, 0, 0, workSize, workSize, null);
+                workG.dispose();
+
+                // Position précise pour centrage parfait
+                int exactX = originalLogoX + (originalLogoSize - displaySize) / 2;
+                int exactY = originalLogoY + (originalLogoSize - displaySize) / 2;
+
+                // Amélioration du rendu final
+                g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                // Appliquer une légère accentuation pour améliorer la netteté
+                float[] sharpenKernel = {
+                        0, -0.2f, 0,
+                        -0.2f, 1.8f, -0.2f,
+                        0, -0.2f, 0
+                };
+                Kernel kernel = new Kernel(3, 3, sharpenKernel);
+                BufferedImageOp sharpenOp = new ConvolveOp(kernel);
+                BufferedImage sharpened = sharpenOp.filter(workImage, null);
+
+                // Dessiner l'image finale
+                g.drawImage(sharpened, exactX, exactY, displaySize, displaySize, null);
+
+                // Ajouter un léger contour en option pour mieux délimiter les logos à fond transparent
+                // Supprimé pour éviter d'ajouter un contour non désiré
             } catch (Exception e) {
-                // En cas d'erreur, revenir au texte
+                System.err.println("Erreur logo: " + e.getMessage());
                 Font originalTeamFont = new Font("Arial", Font.ITALIC, 22);
                 g.setFont(originalTeamFont);
                 g.setColor(Color.GRAY);
-                int arrowXz = textX + teamNameWidth + 20;
-                g.drawString(originalTeam, arrowXz + 30, textY - 70);
+                g.drawString("?", arrowX + arrowWidth + 10, centerY + 7);
             }
         }
 

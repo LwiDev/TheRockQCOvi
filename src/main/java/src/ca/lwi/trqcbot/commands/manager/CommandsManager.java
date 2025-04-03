@@ -7,6 +7,7 @@ import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.jetbrains.annotations.NotNull;
 import src.ca.lwi.trqcbot.commands.Command;
+import src.ca.lwi.trqcbot.commands.list.ComResources;
 import src.ca.lwi.trqcbot.commands.list.ComTR8;
 
 import java.util.ArrayList;
@@ -25,6 +26,14 @@ public class CommandsManager extends ListenerAdapter {
 
     public void registerCommands(){
         this.commands.add(new ComTR8());
+        this.commands.add(new ComResources());
+    }
+
+    public Command getCommand(String name) {
+        return commands.stream()
+                .filter(cmd -> cmd.getName().equalsIgnoreCase(name))
+                .findFirst()
+                .orElse(null);
     }
 
     @Override
@@ -49,5 +58,9 @@ public class CommandsManager extends ListenerAdapter {
     @Override
     public void onReady(@NotNull ReadyEvent e) {
         e.getJDA().updateCommands().addCommands(this.commands.stream().filter(command -> !command.isGuildCommand()).collect(Collectors.toList())).queue();
+        ComResources resourcesCmd = (ComResources) getCommand("resources");
+        if (resourcesCmd != null) {
+            resourcesCmd.registerEventListeners(e.getJDA());
+        }
     }
 }

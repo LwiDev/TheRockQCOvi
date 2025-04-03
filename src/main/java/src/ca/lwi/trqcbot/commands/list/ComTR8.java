@@ -18,6 +18,7 @@ public class ComTR8 extends Command {
 
         setDefaultPermissions(DefaultMemberPermissions.DISABLED);
         SubcommandData welcomeCmd = new SubcommandData("welcome", "Créer un faux message de bienvenue");
+
         addSubcommands(welcomeCmd);
     }
 
