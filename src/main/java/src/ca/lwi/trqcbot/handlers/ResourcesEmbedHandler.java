@@ -129,6 +129,9 @@ public class ResourcesEmbedHandler {
         embed.setColor(new Color(178, 34, 34));
         embed.setTimestamp(Instant.now());
 
+        // Caractère d'espacement pour créer un léger padding
+        String padding = "\u200B \u200B";
+
         // Add categories section
         if (!categories.isEmpty()) {
             StringBuilder categoryContent = new StringBuilder();
@@ -140,6 +143,8 @@ public class ResourcesEmbedHandler {
             }
             embed.addField("📂 Les catégories", categoryContent.toString(), false);
         }
+
+        embed.addField(padding, "", false);
 
         // Add roles section
         if (!roles.isEmpty()) {
@@ -153,6 +158,9 @@ public class ResourcesEmbedHandler {
             embed.addField("👥 Les rôles", roleContent.toString(), false);
         }
 
+        // Léger espacement entre les sections
+        embed.addField(padding, "", false);
+
         // Add important channels section
         if (!importantChannels.isEmpty()) {
             StringBuilder channelContent = new StringBuilder();
@@ -164,6 +172,9 @@ public class ResourcesEmbedHandler {
             }
             embed.addField("📌 Salons importants", channelContent.toString(), false);
         }
+
+        // Léger espacement entre les sections
+        embed.addField(padding, "", false);
 
         // Add useful links section with proper pluralization
         if (!usefulLinks.isEmpty()) {

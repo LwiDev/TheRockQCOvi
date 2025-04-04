@@ -600,8 +600,7 @@ public class ComResources extends Command {
                 updatedItem.append("description", description);
             }
 
-            removeItemFromSection(sectionKey, oldName)
-                    .thenCompose(v -> updateSectionWithNewItem(sectionKey, updatedItem, name))
+            updateSectionWithNewItem(sectionKey, updatedItem, name, oldName)
                     .thenAccept(v -> e.getHook().sendMessage("✅ Élément **" + oldName + "** modifié avec succès.").queue(message -> {
                         message.delete().queueAfter(3, java.util.concurrent.TimeUnit.SECONDS);
                     }))
@@ -638,7 +637,6 @@ public class ComResources extends Command {
 
         private void handleServerNameModal(ModalInteractionEvent e) {
             String serverName = e.getValue("server_name").getAsString();
-
             ResourcesEmbedHandler.updateServerName(serverName)
                     .thenAccept(v -> e.getHook().sendMessage("✅ Le nom du serveur a été mis à jour en **" + serverName + "**.").queue(message -> {
                         message.delete().queueAfter(3, java.util.concurrent.TimeUnit.SECONDS);
@@ -653,9 +651,20 @@ public class ComResources extends Command {
     }
 
     /**
-     * Updates a section with a new item, replacing it if it already exists
+     * Overloaded version for backwards compatibility
      */
     private CompletableFuture<Void> updateSectionWithNewItem(String sectionKey, Document newItem, String itemName) {
+        return updateSectionWithNewItem(sectionKey, newItem, itemName, null);
+    }
+
+    /**
+     * Updates a section with a new item, replacing it if it already exists
+     * @param sectionKey The key of the section to update
+     * @param newItem The new item to add or update
+     * @param newItemName The name of the new item
+     * @param oldItemName The original name of the item (if updating existing item)
+     */
+    private CompletableFuture<Void> updateSectionWithNewItem(String sectionKey, Document newItem, String newItemName, String oldItemName) {
         CompletableFuture<Void> future = new CompletableFuture<>();
 
         try {
@@ -667,21 +676,26 @@ public class ComResources extends Command {
             }
 
             List<Document> items = configDoc.getList(sectionKey, Document.class, new ArrayList<>());
-
-            // Check if item with this name already exists
             boolean found = false;
-            for (int i = 0; i < items.size(); i++) {
-                if (items.get(i).getString("name").equalsIgnoreCase(itemName)) {
-                    items.set(i, newItem); // Replace existing item
-                    found = true;
-                    break;
+            if (oldItemName != null && !oldItemName.isEmpty()) {
+                for (int i = 0; i < items.size(); i++) {
+                    if (items.get(i).getString("name").equals(oldItemName)) {
+                        items.set(i, newItem);
+                        found = true;
+                        break;
+                    }
                 }
             }
-
             if (!found) {
-                items.add(newItem); // Add new item
+                for (int i = 0; i < items.size(); i++) {
+                    if (items.get(i).getString("name").equals(newItemName)) {
+                        items.set(i, newItem);
+                        found = true;
+                        break;
+                    }
+                }
             }
-
+            if (!found) items.add(newItem);
             ResourcesEmbedHandler.updateSection(sectionKey, items)
                     .thenAccept(v -> future.complete(null))
                     .exceptionally(error -> {
@@ -710,10 +724,7 @@ public class ComResources extends Command {
             }
 
             List<Document> items = configDoc.getList(sectionKey, Document.class, new ArrayList<>());
-
-            // Remove the item with the matching name
             items.removeIf(item -> item.getString("name").equals(itemName));
-
             ResourcesEmbedHandler.updateSection(sectionKey, items)
                     .thenAccept(v -> future.complete(null))
                     .exceptionally(error -> {
