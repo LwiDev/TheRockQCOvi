@@ -7,8 +7,7 @@ import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.jetbrains.annotations.NotNull;
 import src.ca.lwi.trqcbot.commands.Command;
-import src.ca.lwi.trqcbot.commands.list.ComResources;
-import src.ca.lwi.trqcbot.commands.list.ComTR8;
+import src.ca.lwi.trqcbot.commands.list.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,8 +24,15 @@ public class CommandsManager extends ListenerAdapter {
     }
 
     public void registerCommands(){
-        this.commands.add(new ComTR8());
-        this.commands.add(new ComResources());
+        registerCommand(new ComLink());
+        registerCommand(new ComRank());
+        registerCommand(new ComResources());
+        registerCommand(new ComTR8());
+        registerCommand(new ComVerify());
+    }
+
+    private void registerCommand(Command command) {
+        this.commands.add(command);
     }
 
     public Command getCommand(String name) {

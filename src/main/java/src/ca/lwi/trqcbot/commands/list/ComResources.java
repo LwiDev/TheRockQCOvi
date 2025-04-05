@@ -2,6 +2,9 @@ package src.ca.lwi.trqcbot.commands.list;
 
 import com.mongodb.client.MongoCollection;
 import net.dv8tion.jda.api.Permission;
+import net.dv8tion.jda.api.entities.Role;
+import net.dv8tion.jda.api.entities.channel.ChannelType;
+import net.dv8tion.jda.api.entities.channel.middleman.GuildChannel;
 import net.dv8tion.jda.api.events.interaction.ModalInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
@@ -21,7 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import src.ca.lwi.trqcbot.Main;
 import src.ca.lwi.trqcbot.commands.Command;
-import src.ca.lwi.trqcbot.handlers.ResourcesEmbedHandler;
+import src.ca.lwi.trqcbot.handlers.ResourcesMessageHandler;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -39,6 +42,8 @@ public class ComResources extends Command {
 
     // Component IDs
     private final String SELECT_SECTION = "resources_section_select";
+    private final String SELECT_CHANNEL = "resources_channel_select";
+    private final String SELECT_ROLE = "resources_role_select";
     private final String BTN_ADD = "resources_add_item";
     private final String BTN_BACK_TO_SECTIONS = "resources_back_to_sections";
     private final String BTN_EDIT = "resources_edit_item";
@@ -50,6 +55,7 @@ public class ComResources extends Command {
     private final String MODAL_EDIT = "resources_edit_modal";
     private final String MODAL_DELETE = "resources_delete_modal";
     private final String MODAL_SERVER_NAME = "resources_server_name_modal";
+    private final String MODAL_ADD_WITH_SELECTOR = "resources_add_with_selector";
 
     // Cache section choice for each user
     private final Map<String, String> userSectionChoices = new HashMap<>();
@@ -63,7 +69,7 @@ public class ComResources extends Command {
         setDefaultPermissions(DefaultMemberPermissions.DISABLED);
 
         // Create simplified subcommands
-        SubcommandData updateCmd = new SubcommandData("update", "Mettre à jour le message d'accueil");
+        SubcommandData updateCmd = new SubcommandData("update", "Mettre à jour le message");
         updateCmd.addOption(OptionType.BOOLEAN, "force_new", "Créer un nouveau message même si un existe déjà", false);
 
         SubcommandData manageCmd = new SubcommandData("manage", "Gérer les sections et les éléments du message");
@@ -127,8 +133,8 @@ public class ComResources extends Command {
     private void handleUpdate(SlashCommandInteractionEvent e) {
         boolean forceNew = e.getOption("force_new") != null && Objects.requireNonNull(e.getOption("force_new")).getAsBoolean();
 
-        ResourcesEmbedHandler.updateWelcomeEmbed(forceNew)
-                .thenAccept(v -> e.getHook().sendMessage("✅ Le message d'accueil a été mis à jour.").queue(message -> {
+        ResourcesMessageHandler.updateResourcesMessage(forceNew)
+                .thenAccept(v -> e.getHook().sendMessage("✅ Le message a été mis à jour.").queue(message -> {
                     message.delete().queueAfter(3, java.util.concurrent.TimeUnit.SECONDS);
                 }))
                 .exceptionally(error -> {
@@ -180,7 +186,7 @@ public class ComResources extends Command {
         List<Document> links = configDoc.getList(SECTION_LINKS, Document.class, new ArrayList<>());
 
         StringBuilder details = new StringBuilder();
-        details.append("📊 **Configuration actuelle du message d'accueil**\n")
+        details.append("📊 **Configuration actuelle du message**\n")
                 .append("• Nom du serveur: ").append(serverName).append("\n\n");
 
         // Liste des rôles
@@ -271,18 +277,74 @@ public class ComResources extends Command {
                 return;
             }
 
+            // Si c'est rôles ou salons, on pourrait proposer une interface spéciale avec des sélecteurs
+            if (sectionKey.equals(SECTION_ROLES) || sectionKey.equals(SECTION_CHANNELS)) {
+                handleAddRoleOrChannel(e, sectionKey);
+                return;
+            }
+
             String sectionName = getSectionDisplayName(sectionKey);
             Modal.Builder modalBuilder = Modal.create(MODAL_ADD + ":" + sectionKey, "Ajouter un " + sectionName);
-            TextInput emojiInput = TextInput.create("emoji", "Emoji", TextInputStyle.SHORT).setPlaceholder("Cliquez ici puis utilisez Ctrl+Cmd+Space ou Win+. pour les emojis").setRequired(true).setMaxLength(5).build();
-            TextInput nameInput = TextInput.create("name", "Nom", TextInputStyle.SHORT).setPlaceholder("Nom affiché dans le message").setRequired(true).setMaxLength(50).build();
-            TextInput thirdInput;
+
+            // Ajouter le champ emoji pour les catégories et liens
+            TextInput emojiInput = TextInput.create("emoji", "Emoji", TextInputStyle.SHORT)
+                    .setPlaceholder("Cliquez ici puis utilisez Ctrl+Cmd+Space ou Win+. pour les emojis")
+                    .setRequired(true)
+                    .setMaxLength(5)
+                    .build();
+            modalBuilder.addComponents(ActionRow.of(emojiInput));
+
+            // Champ nom pour tous
+            TextInput nameInput = TextInput.create("name", "Nom", TextInputStyle.SHORT)
+                    .setPlaceholder("Nom affiché dans le message")
+                    .setRequired(true)
+                    .setMaxLength(50)
+                    .build();
+            modalBuilder.addComponents(ActionRow.of(nameInput));
+
+            // Champ spécifique selon la section
             if (sectionKey.equals(SECTION_LINKS)) {
-                thirdInput = TextInput.create("url", "URL", TextInputStyle.SHORT).setPlaceholder("Exemple: https://discord.gg/...").setRequired(true).build();
+                TextInput urlInput = TextInput.create("url", "URL", TextInputStyle.SHORT)
+                        .setPlaceholder("Exemple: https://discord.gg/...")
+                        .setRequired(true)
+                        .build();
+                modalBuilder.addComponents(ActionRow.of(urlInput));
             } else {
-                thirdInput = TextInput.create("description", "Description", TextInputStyle.PARAGRAPH).setPlaceholder("Description détaillée").setRequired(true).setMaxLength(200).build();
+                TextInput descInput = TextInput.create("description", "Description", TextInputStyle.PARAGRAPH)
+                        .setPlaceholder("Description détaillée")
+                        .setRequired(true)
+                        .setMaxLength(200)
+                        .build();
+                modalBuilder.addComponents(ActionRow.of(descInput));
             }
-            modalBuilder.addComponents(ActionRow.of(emojiInput), ActionRow.of(nameInput), ActionRow.of(thirdInput));
+
             e.replyModal(modalBuilder.build()).queue();
+        }
+
+        /**
+         * Gérer l'ajout de rôle ou salon avec sélecteur
+         */
+        private void handleAddRoleOrChannel(ButtonInteractionEvent e, String sectionKey) {
+            if (sectionKey.equals(SECTION_ROLES)) {
+                List<Role> roles = e.getGuild().getRoles();
+                StringSelectMenu.Builder menuBuilder = StringSelectMenu.create(SELECT_ROLE).setPlaceholder("Sélectionner un rôle").setMaxValues(1);
+                for (Role role : roles) {
+                    if (!role.isManaged() && !role.isPublicRole()) {
+                        menuBuilder.addOption(role.getName(), role.getId(), "Rôle: " + role.getName());
+                    }
+                }
+                e.reply("Choisissez un rôle à ajouter:").addComponents(ActionRow.of(menuBuilder.build())).setEphemeral(true).queue();
+            } else if (sectionKey.equals(SECTION_CHANNELS)) {
+                List<GuildChannel> channels = e.getGuild().getChannels();
+                StringSelectMenu.Builder menuBuilder = StringSelectMenu.create(SELECT_CHANNEL).setPlaceholder("Sélectionner un salon").setMaxValues(1);
+                for (GuildChannel channel : channels) {
+                    if (channel.getType().isMessage() || channel.getType().isThread() || channel.getType() == ChannelType.FORUM) {
+                        String emoji = channel.getType().isThread() ? "🧵" : (channel.getType() == ChannelType.FORUM ? "📊" : "📝");
+                        menuBuilder.addOption(emoji + " " + channel.getName(), channel.getId(), "Salon: " + channel.getName());
+                    }
+                }
+                e.reply("Choisissez un salon à ajouter:").addComponents(ActionRow.of(menuBuilder.build())).setEphemeral(true).queue();
+            }
         }
 
         private void handleEditButtonClick(ButtonInteractionEvent e, String userId) {
@@ -312,8 +374,15 @@ public class ComResources extends Command {
 
             for (Document item : items) {
                 String name = item.getString("name");
-                String emoji = item.getString("emoji");
-                menuBuilder.addOption(emoji + " " + name, name);
+                // Gérer l'affichage de manière conditionnelle selon la section
+                if (sectionKey.equals(SECTION_ROLES) || sectionKey.equals(SECTION_CHANNELS)) {
+                    // Pour les rôles et les salons (pas d'emoji)
+                    menuBuilder.addOption(name, name);
+                } else {
+                    // Pour les autres sections (avec emoji)
+                    String emoji = item.getString("emoji");
+                    menuBuilder.addOption(emoji + " " + name, name);
+                }
             }
 
             e.reply("Choisissez l'élément à modifier :").addComponents(ActionRow.of(menuBuilder.build()))
@@ -347,8 +416,15 @@ public class ComResources extends Command {
 
             for (Document item : items) {
                 String name = item.getString("name");
-                String emoji = item.getString("emoji");
-                menuBuilder.addOption(emoji + " " + name, name);
+                // Gérer l'affichage de manière conditionnelle selon la section
+                if (sectionKey.equals(SECTION_ROLES) || sectionKey.equals(SECTION_CHANNELS)) {
+                    // Pour les rôles et les salons (pas d'emoji)
+                    menuBuilder.addOption(name, name);
+                } else {
+                    // Pour les autres sections (avec emoji)
+                    String emoji = item.getString("emoji");
+                    menuBuilder.addOption(emoji + " " + name, name);
+                }
             }
 
             e.reply("⚠️ Choisissez l'élément à supprimer :").addComponents(ActionRow.of(menuBuilder.build()))
@@ -427,6 +503,10 @@ public class ComResources extends Command {
                     handleEditItemSelect(e);
                 } else if (menuId.startsWith("delete_item_select:")) {
                     handleDeleteItemSelect(e);
+                } else if (menuId.equals(SELECT_CHANNEL)) {
+                    handleChannelSelect(e);
+                } else if (menuId.equals(SELECT_ROLE)) {
+                    handleRoleSelect(e);
                 }
             }
         }
@@ -460,7 +540,6 @@ public class ComResources extends Command {
             String sectionKey = parts[1];
             String itemName = e.getValues().get(0);
 
-            // Find the item
             MongoCollection<Document> collection = Main.getMongoConnection().getDatabase().getCollection(COLLECTION_NAME);
             Document configDoc = collection.find(new Document("type", "config")).first();
             List<Document> items = configDoc.getList(sectionKey, Document.class, new ArrayList<>());
@@ -472,52 +551,42 @@ public class ComResources extends Command {
                     break;
                 }
             }
-
             if (itemToEdit == null) {
                 e.reply("❌ Élément non trouvé.").setEphemeral(true).queue();
                 return;
             }
 
-            // Build edit modal
-            Modal.Builder modalBuilder = Modal.create(MODAL_EDIT + ":" + sectionKey + ":" + itemName,
-                    "Modifier " + getSectionItemName(sectionKey) + ": " + itemName);
-
-            // Common fields
-            TextInput emojiInput = TextInput.create("emoji", "Emoji", TextInputStyle.SHORT)
-                    .setValue(itemToEdit.getString("emoji"))
-                    .setRequired(true)
-                    .setMaxLength(5)
-                    .build();
-
-            TextInput nameInput = TextInput.create("name", "Nom", TextInputStyle.SHORT)
-                    .setValue(itemToEdit.getString("name"))
-                    .setRequired(true)
-                    .setMaxLength(50)
-                    .build();
-
-            // Different third field based on section
-            TextInput thirdInput;
-            if (sectionKey.equals(SECTION_LINKS)) {
-                thirdInput = TextInput.create("url", "URL", TextInputStyle.SHORT)
-                        .setValue(itemToEdit.getString("url"))
-                        .setRequired(true)
-                        .build();
-            } else {
-                thirdInput = TextInput.create("description", "Description", TextInputStyle.PARAGRAPH)
-                        .setValue(itemToEdit.getString("description"))
-                        .setRequired(true)
-                        .setMaxLength(200)
-                        .build();
+            Modal.Builder modalBuilder = Modal.create(MODAL_EDIT + ":" + sectionKey + ":" + itemName, "Modifier " + getSectionItemName(sectionKey) + ": " + itemName);
+            switch (sectionKey) {
+                case SECTION_ROLES:
+                case SECTION_CHANNELS: {
+                    String paramName = itemToEdit.getString("name");
+                    String paramId = itemToEdit.getString("id");
+                    TextInput idInput = TextInput.create("id", "ID (ne pas modifier)", TextInputStyle.SHORT).setValue(paramId).setRequired(true).build();
+                    TextInput nameInput = TextInput.create("name", "Nom", TextInputStyle.SHORT).setValue(paramName).setRequired(true).setMaxLength(50).build();
+                    TextInput descInput = TextInput.create("description", "Description", TextInputStyle.PARAGRAPH).setValue(itemToEdit.getString("description")).setRequired(true).setMaxLength(200).build();
+                    modalBuilder.addComponents(ActionRow.of(nameInput), ActionRow.of(descInput), ActionRow.of(idInput));
+                    break;
+                }
+                case SECTION_LINKS: {
+                    TextInput emojiInput = TextInput.create("emoji", "Emoji", TextInputStyle.SHORT).setValue(itemToEdit.getString("emoji")).setRequired(true).setMaxLength(5).build();
+                    TextInput nameInput = TextInput.create("name", "Nom", TextInputStyle.SHORT).setValue(itemToEdit.getString("name")).setRequired(true).setMaxLength(50).build();
+                    TextInput urlInput = TextInput.create("url", "URL", TextInputStyle.SHORT).setValue(itemToEdit.getString("url")).setRequired(true).build();
+                    modalBuilder.addComponents(ActionRow.of(emojiInput), ActionRow.of(nameInput), ActionRow.of(urlInput));
+                    break;
+                }
+                default: {
+                    TextInput emojiInput = TextInput.create("emoji", "Emoji", TextInputStyle.SHORT).setValue(itemToEdit.getString("emoji")).setRequired(true).setMaxLength(5).build();
+                    TextInput nameInput = TextInput.create("name", "Nom", TextInputStyle.SHORT).setValue(itemToEdit.getString("name")).setRequired(true).setMaxLength(50).build();
+                    TextInput descInput = TextInput.create("description", "Description", TextInputStyle.PARAGRAPH).setValue(itemToEdit.getString("description")).setRequired(true).setMaxLength(200).build();
+                    modalBuilder.addComponents(ActionRow.of(emojiInput), ActionRow.of(nameInput), ActionRow.of(descInput));
+                    break;
+                }
             }
-
-            modalBuilder.addComponents(
-                    ActionRow.of(emojiInput),
-                    ActionRow.of(nameInput),
-                    ActionRow.of(thirdInput)
-            );
 
             e.replyModal(modalBuilder.build()).queue();
         }
+
 
         private void handleDeleteItemSelect(StringSelectInteractionEvent e) {
             String[] parts = e.getComponentId().split(":");
@@ -529,6 +598,62 @@ public class ComResources extends Command {
                     .addComponents(ActionRow.of(confirmButton, cancelButton))
                     .setEphemeral(true)
                     .queue();
+        }
+
+        /**
+         * Gestion de la sélection d'un salon
+         */
+        private void handleChannelSelect(StringSelectInteractionEvent e) {
+            String channelId = e.getValues().get(0);
+            GuildChannel channel = e.getGuild().getGuildChannelById(channelId);
+
+            if (channel == null) {
+                e.reply("❌ Salon introuvable.").setEphemeral(true).queue();
+                return;
+            }
+
+            // Créer un modal pour ajouter la description du salon
+            Modal.Builder modalBuilder = Modal.create(
+                    MODAL_ADD_WITH_SELECTOR + ":" + SECTION_CHANNELS + ":" + channelId,
+                    "Ajouter le salon: " + channel.getName()
+            );
+
+            TextInput descInput = TextInput.create("description", "Description", TextInputStyle.PARAGRAPH)
+                    .setPlaceholder("Description détaillée de ce salon")
+                    .setRequired(true)
+                    .setMaxLength(200)
+                    .build();
+
+            modalBuilder.addComponents(ActionRow.of(descInput));
+            e.replyModal(modalBuilder.build()).queue();
+        }
+
+        /**
+         * Gestion de la sélection d'un rôle
+         */
+        private void handleRoleSelect(StringSelectInteractionEvent e) {
+            String roleId = e.getValues().get(0);
+            Role role = e.getGuild().getRoleById(roleId);
+
+            if (role == null) {
+                e.reply("❌ Rôle introuvable.").setEphemeral(true).queue();
+                return;
+            }
+
+            // Créer un modal pour ajouter la description du rôle
+            Modal.Builder modalBuilder = Modal.create(
+                    MODAL_ADD_WITH_SELECTOR + ":" + SECTION_ROLES + ":" + roleId,
+                    "Ajouter le rôle: " + role.getName()
+            );
+
+            TextInput descInput = TextInput.create("description", "Description", TextInputStyle.PARAGRAPH)
+                    .setPlaceholder("Description détaillée de ce rôle")
+                    .setRequired(true)
+                    .setMaxLength(200)
+                    .build();
+
+            modalBuilder.addComponents(ActionRow.of(descInput));
+            e.replyModal(modalBuilder.build()).queue();
         }
     }
 
@@ -551,6 +676,8 @@ public class ComResources extends Command {
                         handleDeleteModal(e);
                     } else if (modalId.equals(MODAL_SERVER_NAME)) {
                         handleServerNameModal(e);
+                    } else if (modalId.startsWith(MODAL_ADD_WITH_SELECTOR)) {
+                        handleAddWithSelectorModal(e);
                     }
                 } catch (Exception ex) {
                     LOGGER.error("Erreur lors du traitement du modal: {}", ex.getMessage(), ex);
@@ -562,16 +689,31 @@ public class ComResources extends Command {
         private void handleAddModal(ModalInteractionEvent e) {
             String[] parts = e.getModalId().split(":");
             String sectionKey = parts[1];
-            String emoji = e.getValue("emoji").getAsString();
+            Document newItem = new Document();
+
+            // Obtenir le nom et la description pour tous les types
             String name = e.getValue("name").getAsString();
-            Document newItem = new Document().append("emoji", emoji).append("name", name);
+            newItem.append("name", name);
+
+            // Ajouter l'emoji seulement pour les sections qui en ont besoin
+            if (sectionKey.equals(SECTION_CATEGORIES) || sectionKey.equals(SECTION_LINKS)) {
+                String emoji = e.getValue("emoji").getAsString();
+                newItem.append("emoji", emoji);
+            }
+
             if (sectionKey.equals(SECTION_LINKS)) {
                 String url = e.getValue("url").getAsString();
                 newItem.append("url", url);
+            } else if (!sectionKey.equals(SECTION_ROLES) && !sectionKey.equals(SECTION_CHANNELS)) {
+                // Pour les autres sections qui ne sont pas les rôles ou les salons
+                String description = e.getValue("description").getAsString();
+                newItem.append("description", description);
             } else {
+                // Pour les rôles et les salons
                 String description = e.getValue("description").getAsString();
                 newItem.append("description", description);
             }
+
             updateSectionWithNewItem(sectionKey, newItem, name)
                     .thenAccept(v -> e.getHook().sendMessage("✅ Élément **" + name + "** ajouté avec succès.").queue(message -> {
                         message.delete().queueAfter(3, java.util.concurrent.TimeUnit.SECONDS);
@@ -588,13 +730,22 @@ public class ComResources extends Command {
             String[] parts = e.getModalId().split(":");
             String sectionKey = parts[1];
             String oldName = parts[2];
-            String emoji = e.getValue("emoji").getAsString();
+            Document updatedItem = new Document();
             String name = e.getValue("name").getAsString();
-            Document updatedItem = new Document().append("emoji", emoji).append("name", name);
+            updatedItem.append("name", name);
+
+            if (sectionKey.equals(SECTION_CATEGORIES) || sectionKey.equals(SECTION_LINKS)) {
+                String emoji = e.getValue("emoji").getAsString();
+                updatedItem.append("emoji", emoji);
+            }
 
             if (sectionKey.equals(SECTION_LINKS)) {
                 String url = e.getValue("url").getAsString();
                 updatedItem.append("url", url);
+            } else if (sectionKey.equals(SECTION_CHANNELS) || sectionKey.equals(SECTION_ROLES)) {
+                String id = e.getValue("id").getAsString();
+                String description = e.getValue("description").getAsString();
+                updatedItem.append("id", id).append("description", description);
             } else {
                 String description = e.getValue("description").getAsString();
                 updatedItem.append("description", description);
@@ -637,7 +788,7 @@ public class ComResources extends Command {
 
         private void handleServerNameModal(ModalInteractionEvent e) {
             String serverName = e.getValue("server_name").getAsString();
-            ResourcesEmbedHandler.updateServerName(serverName)
+            ResourcesMessageHandler.updateServerName(serverName)
                     .thenAccept(v -> e.getHook().sendMessage("✅ Le nom du serveur a été mis à jour en **" + serverName + "**.").queue(message -> {
                         message.delete().queueAfter(3, java.util.concurrent.TimeUnit.SECONDS);
                     }))
@@ -645,6 +796,41 @@ public class ComResources extends Command {
                         e.getHook().sendMessage("❌ Erreur lors de la mise à jour : " + error.getMessage()).queue(message -> {
                             message.delete().queueAfter(3, java.util.concurrent.TimeUnit.SECONDS);
                         });
+                        return null;
+                    });
+        }
+
+        /**
+         * Gestion du modal après sélection de salon/rôle
+         */
+        private void handleAddWithSelectorModal(ModalInteractionEvent e) {
+            String[] parts = e.getModalId().split(":");
+            String sectionKey = parts[1];
+            String entityId = parts[2];
+            String description = e.getValue("description").getAsString();
+            Document newItem = new Document();
+            if (sectionKey.equals(SECTION_ROLES)) {
+                Role role = e.getGuild().getRoleById(entityId);
+                if (role == null) {
+                    e.getHook().sendMessage("❌ Rôle introuvable.").queue();
+                    return;
+                }
+                newItem.append("name", role.getName()).append("id", role.getId()).append("description", description);
+            } else if (sectionKey.equals(SECTION_CHANNELS)) {
+                GuildChannel channel = e.getGuild().getGuildChannelById(entityId);
+                if (channel == null) {
+                    e.getHook().sendMessage("❌ Salon introuvable.").queue();
+                    return;
+                }
+                newItem.append("name", channel.getName()).append("id", channel.getId()).append("description", description);
+            }
+            updateSectionWithNewItem(sectionKey, newItem, newItem.getString("name"))
+                    .thenAccept(v -> e.getHook().sendMessage("✅ " + (sectionKey.equals(SECTION_ROLES) ? "Rôle" : "Salon") +
+                            " **" + newItem.getString("name") + "** ajouté avec succès.").queue(message -> {
+                        message.delete().queueAfter(3, java.util.concurrent.TimeUnit.SECONDS);
+                    }))
+                    .exceptionally(error -> {
+                        e.getHook().sendMessage("❌ Erreur lors de l'ajout : " + error.getMessage()).queue();
                         return null;
                     });
         }
@@ -696,7 +882,7 @@ public class ComResources extends Command {
                 }
             }
             if (!found) items.add(newItem);
-            ResourcesEmbedHandler.updateSection(sectionKey, items)
+            ResourcesMessageHandler.updateSection(sectionKey, items)
                     .thenAccept(v -> future.complete(null))
                     .exceptionally(error -> {
                         future.completeExceptionally(error);
@@ -725,7 +911,7 @@ public class ComResources extends Command {
 
             List<Document> items = configDoc.getList(sectionKey, Document.class, new ArrayList<>());
             items.removeIf(item -> item.getString("name").equals(itemName));
-            ResourcesEmbedHandler.updateSection(sectionKey, items)
+            ResourcesMessageHandler.updateSection(sectionKey, items)
                     .thenAccept(v -> future.complete(null))
                     .exceptionally(error -> {
                         future.completeExceptionally(error);
