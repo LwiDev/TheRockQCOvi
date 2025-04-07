@@ -82,6 +82,11 @@ public class WelcomeMessageHandler {
             channel.sendMessage("Les " + teamName + " sont fiers de choisir **" + member.getAsMention() + "** comme " + memberCount + "e choix au repêchage !")
                     .addFiles(FileUpload.fromData(imageBytes, member.getEffectiveName() + "_draft.png"))
                     .queue();
+
+            Main.getMongoConnection().getDatabase().getCollection("users").updateOne(
+                    new Document("userId", member.getId()),
+                    new Document("$set", new Document("teamName", teamName).append("roundPick", memberCount))
+            );
         } catch (Exception ex) {
             LOGGER.error("Erreur lors de la génération du message {}: {}", "Globale", ex.getMessage());
             channel.sendMessage("Bienvenue à " + member.getAsMention() + " !").queue();

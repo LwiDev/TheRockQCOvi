@@ -10,10 +10,10 @@ import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import src.ca.lwi.trqcbot.commands.manager.CommandsManager;
 import src.ca.lwi.trqcbot.handlers.WelcomeMessageHandler;
-import src.ca.lwi.trqcbot.listeners.JoinListener;
 import src.ca.lwi.trqcbot.mongo.MongoConnection;
 import src.ca.lwi.trqcbot.mongo.MongoCredentials;
 import src.ca.lwi.trqcbot.ranks.RankManager;
+import src.ca.lwi.trqcbot.teams.TeamManager;
 
 public class Main {
 
@@ -23,6 +23,8 @@ public class Main {
     private static MongoConnection mongoConnection;
     @Getter
     private static RankManager rankManager;
+    @Getter
+    private static TeamManager teamManager;
     @Getter
     private static WelcomeMessageHandler welcomeMessageHandler;
 
@@ -41,6 +43,7 @@ public class Main {
         }
 
         rankManager = new RankManager();
+        teamManager = new TeamManager();
 
 //        new Log().init(new BotCommandManager());
         jda = JDABuilder
@@ -48,7 +51,6 @@ public class Main {
                 .setStatus(OnlineStatus.DO_NOT_DISTURB)
                 .setActivity(Activity.playing("Match de Hockey"))
                 .addEventListeners(rankManager)
-                .addEventListeners(new JoinListener())
                 .addEventListeners(new CommandsManager())
                 .build();
 

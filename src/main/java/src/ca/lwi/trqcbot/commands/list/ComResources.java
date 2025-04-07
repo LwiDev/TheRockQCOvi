@@ -97,11 +97,6 @@ public class ComResources extends Command {
             return;
         }
 
-        if (!Objects.requireNonNull(e.getMember()).hasPermission(Permission.ADMINISTRATOR)) {
-            e.reply("Vous n'avez pas les permissions nécessaires pour utiliser cette commande.").setEphemeral(true).queue();
-            return;
-        }
-
         String subcommandName = e.getSubcommandName();
         if (subcommandName == null) {
             e.reply("Veuillez spécifier une sous-commande.").setEphemeral(true).queue();

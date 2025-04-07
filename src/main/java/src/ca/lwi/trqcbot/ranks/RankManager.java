@@ -15,6 +15,7 @@ import org.bson.Document;
 import org.jetbrains.annotations.NotNull;
 import src.ca.lwi.trqcbot.Main;
 
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -52,34 +53,24 @@ public class RankManager extends ListenerAdapter {
     }
     
     @Override
-    public void onGuildMemberJoin(@NotNull GuildMemberJoinEvent event) {
-        // Attribuer le rôle "Recrue" aux nouveaux membres
-        Guild guild = event.getGuild();
-        Member member = event.getMember();
-        
-        // Vérifier si l'utilisateur existe déjà dans la base de données
+    public void onGuildMemberJoin(@NotNull GuildMemberJoinEvent e) {
+        Guild guild = e.getGuild();
+        Member member = e.getMember();
         Document existingUser = userCollection.find(new Document("userId", member.getId())).first();
-        if (existingUser != null) {
-            return; // L'utilisateur existe déjà
-        }
-        
-        // Création d'un document pour stocker les infos de l'utilisateur dans MongoDB
+        if (existingUser != null) return;
+
         Document userDoc = new Document("userId", member.getId())
                 .append("username", member.getUser().getName())
-                .append("joinDate", System.currentTimeMillis())
+                .append("joinDate", new Date(System.currentTimeMillis()))
                 .append("messageCount", 0)
                 .append("youtubeLinked", false)
-                .append("youtubeUsername", "")
                 .append("currentRank", "Recrue");
-        
-        // Insertion du document dans MongoDB
         userCollection.insertOne(userDoc);
         
-        // Attribution du rôle Recrue
         Role recrueRole = guild.getRoleById(recrueRoleId);
-        if (recrueRole != null) {
-            guild.addRoleToMember(UserSnowflake.fromId(member.getId()), recrueRole).queue();
-        }
+        if (recrueRole != null) guild.addRoleToMember(UserSnowflake.fromId(member.getId()), recrueRole).queue();
+
+        Main.getWelcomeMessageHandler().createMessage(e.getGuild(), e.getMember());
     }
     
     @Override
