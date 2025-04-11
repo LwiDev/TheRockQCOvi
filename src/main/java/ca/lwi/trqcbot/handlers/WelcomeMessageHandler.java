@@ -1,5 +1,8 @@
 package ca.lwi.trqcbot.handlers;
 
+import ca.lwi.trqcbot.Main;
+import ca.lwi.trqcbot.utils.FontUtils;
+import ca.lwi.trqcbot.utils.TeamSelectionResult;
 import com.mongodb.client.MongoCollection;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
@@ -8,8 +11,6 @@ import net.dv8tion.jda.api.utils.FileUpload;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import ca.lwi.trqcbot.Main;
-import ca.lwi.trqcbot.utils.TeamSelectionResult;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
@@ -20,6 +21,8 @@ import java.awt.image.Kernel;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
@@ -89,6 +92,64 @@ public class WelcomeMessageHandler {
             );
         } catch (Exception ex) {
             LOGGER.error("Erreur lors de la génération du message {}: {}", "Globale", ex.getMessage());
+            channel.sendMessage("Bienvenue à " + member.getAsMention() + " !").queue();
+        }
+    }
+
+    public void createWelcomeMessageFromDb(Guild guild, Member member) {
+        TextChannel channel = guild.getTextChannelById("1356752351561781349");
+        if (channel == null) {
+            System.out.println("Channel de bienvenue non trouvé: " + this.welcomeChannel);
+            return;
+        }
+
+        try {
+            Document userData = Main.getMongoConnection().getDatabase().getCollection("users")
+                    .find(new Document("userId", member.getId()))
+                    .first();
+
+            if (userData == null) {
+                channel.sendMessage("Bienvenue à " + member.getAsMention() + " ! (Aucune donnée d'équipe trouvée)").queue();
+                return;
+            }
+
+            String teamName = userData.getString("teamName");
+            if (teamName == null || teamName.isEmpty()) {
+                channel.sendMessage("Bienvenue à " + member.getAsMention() + " ! (Aucune équipe attribuée)").queue();
+                return;
+            }
+
+            // Récupérer les données de l'équipe
+            Document teamDoc = teamsCollection.find(new Document("name", teamName)).first();
+            if (teamDoc == null) {
+                channel.sendMessage("Bienvenue à " + member.getAsMention() + " ! (Équipe non trouvée: " + teamName + ")").queue();
+                return;
+            }
+
+            String teamLogoUrl = teamDoc.getString("logo");
+            String teamColorHex = teamDoc.getString("color");
+
+            Integer roundPick = userData.getInteger("roundPick");
+            if (roundPick == null) {
+                roundPick = guild.getMemberCount();
+            }
+
+            // Utiliser les données existantes pour générer l'image
+            byte[] imageBytes = generateDraftImage(
+                    teamName,
+                    teamLogoUrl,
+                    teamColorHex,
+                    member,
+                    "",
+                    roundPick
+            );
+
+            channel.sendMessage("Les " + teamName + " sont fiers de choisir **" + member.getAsMention() + "** comme " + roundPick + "e choix au repêchage !")
+                    .addFiles(FileUpload.fromData(imageBytes, member.getEffectiveName() + "_draft.png"))
+                    .queue();
+
+        } catch (Exception ex) {
+            LOGGER.error("Erreur lors de la génération du message {}: {}", "Depuis DB", ex.getMessage());
             channel.sendMessage("Bienvenue à " + member.getAsMention() + " !").queue();
         }
     }
@@ -198,17 +259,15 @@ public class WelcomeMessageHandler {
         );
     }
 
-    private byte[] generateDraftImage(String teamName, String logoUrl, String colorHex, Member member, String originalTeam) throws IOException {
-        // Dimensions de l'image
+    private byte[] generateDraftImage(String teamName, String logoUrl, String colorHex, Member member, String originalTeam) throws IOException, URISyntaxException {
+        return generateDraftImage(teamName, logoUrl, colorHex, member, originalTeam, member.getGuild().getMemberCount());
+    }
+
+    private byte[] generateDraftImage(String teamName, String logoUrl, String colorHex, Member member, String originalTeam, int roundPick) throws IOException, URISyntaxException {
         int width = 800;
         int height = 400;
-
-        // Obtenir le nom d'affichage du membre Discord
         String playerName = member.getEffectiveName();
-
-        // Obtenir l'ordre du choix au repêchage
-        int memberCount = member.getGuild().getMemberCount();
-        String draftPick = memberCount + "e";
+        String draftPick = roundPick + "e";
 
         // Créer l'image
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
@@ -223,16 +282,12 @@ public class WelcomeMessageHandler {
         Color teamColor = parseColor(colorHex);
 
         // Créer un dégradé de la couleur de l'équipe (plus foncé) vers le noir
-        GradientPaint gradient = new GradientPaint(
-                0, 0, darkerColor(teamColor),
-                width, height, Color.BLACK
-        );
+        GradientPaint gradient = new GradientPaint(0, 0, darkerColor(teamColor), width, height, Color.BLACK);
         g.setPaint(gradient);
         g.fillRect(0, 0, width, height);
 
         // Charger le logo de l'équipe pour le fond (watermark)
-        BufferedImage logoForBackground = ImageIO.read(new URL(logoUrl));
-        // Dessiner un logo plus grand et plus sombre en arrière-plan
+        BufferedImage logoForBackground = ImageIO.read(new URI(logoUrl).toURL());
         int bgLogoSize = 350;
         int bgLogoX = width - bgLogoSize - 50;
         int bgLogoY = (height - bgLogoSize) / 2;
@@ -246,12 +301,12 @@ public class WelcomeMessageHandler {
         g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
 
         // Charger et dessiner le logo de l'équipe principal
-        BufferedImage logo = ImageIO.read(new URL(logoUrl));
+        BufferedImage logo = ImageIO.read(new URI(logoUrl).toURL());
         int logoSize = 150;
         g.drawImage(logo, 50, (height - logoSize) / 2, logoSize, logoSize, null);
 
         // Configurer les polices
-        Font nameFont = new Font("Arial", Font.BOLD, 60);
+        Font nameFont = FontUtils.calculateOptimalNameFont(g, playerName, 400, 60);
         Font pickFont = new Font("Arial", Font.BOLD, 40);
         Font teamFont = new Font("Arial", Font.BOLD, 30);
 
@@ -324,23 +379,14 @@ public class WelcomeMessageHandler {
                 int displaySize = Math.min(originalLogoSize, maxLogoSize);
 
                 // Chargement optimisé
-                URL originalLogoUrl = new URL(originalTeam);
+                URL originalLogoUrl = new URI(originalTeam).toURL();
                 HttpURLConnection connection = (HttpURLConnection) originalLogoUrl.openConnection();
                 connection.setRequestProperty("User-Agent", "Mozilla/5.0");
                 connection.setDoInput(true);
                 connection.setConnectTimeout(5000);
 
-                // Chargement avec support de transparence
                 BufferedImage originalLogo = ImageIO.read(connection.getInputStream());
-
-                // Création d'une image avec canal alpha (transparence)
-                BufferedImage transparentLogo = new BufferedImage(
-                        originalLogo.getWidth(),
-                        originalLogo.getHeight(),
-                        BufferedImage.TYPE_INT_ARGB
-                );
-
-                // Copier l'image originale en remplaçant le blanc par de la transparence
+                BufferedImage transparentLogo = new BufferedImage(originalLogo.getWidth(), originalLogo.getHeight(), BufferedImage.TYPE_INT_ARGB);
                 for (int y = 0; y < originalLogo.getHeight(); y++) {
                     for (int x = 0; x < originalLogo.getWidth(); x++) {
                         int rgb = originalLogo.getRGB(x, y);

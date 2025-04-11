@@ -2,6 +2,8 @@ package ca.lwi.trqcbot.commands.list;
 
 import ca.lwi.trqcbot.Main;
 import ca.lwi.trqcbot.commands.Command;
+import ca.lwi.trqcbot.reputation.ReputationManager;
+import ca.lwi.trqcbot.utils.FontUtils;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
@@ -23,19 +25,8 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 
 public class ComRank extends Command {
-
-    private static final Font TITLE_FONT = new Font("Arial", Font.BOLD, 60);
-    private static final Font SUBTITLE_FONT = new Font("Arial", Font.BOLD, 16);
-    private static final Font HEADER_FONT = new Font("Arial", Font.BOLD, 18);
-    private static final Font DRAFT_CATEGORY_FONT = new Font("Arial", Font.BOLD, 22);
-    private static final Font DRAFT_INFO_FONT = new Font("Arial", Font.BOLD, 34);
-    private static final Font DRAFT_SUBINFO_FONT = new Font("Arial", Font.PLAIN, 16);
-    private static final Color BACKGROUND_COLOR = new Color(10, 10, 10);
-    private static final Color ACCENT_COLOR = new Color(0, 200, 200);
-    private static final Color HEADER_DARK = new Color(15, 15, 15);
 
     public ComRank() {
         super("rank", "Affichez votre rang actuel sur le serveur");
@@ -44,8 +35,7 @@ public class ComRank extends Command {
 
     @Override
     public void onSlash(SlashCommandInteractionEvent e) {
-        e.deferReply().queue(); // Déferrer la réponse immédiatement pour éviter le timeout
-
+        e.deferReply().queue();
         String userId = e.getUser().getId();
         Document userData = Main.getRankManager().getUserData(userId);
         if (userData != null) {
@@ -55,13 +45,12 @@ public class ComRank extends Command {
             String teamName = userData.getString("teamName");
             int roundPick = userData.getInteger("roundPick", 0);
             String rank = userData.getString("currentRank");
-            boolean youtubeLinked = userData.getBoolean("youtubeLinked", false);
-            String youtubeUsername = userData.getString("youtubeUsername") != null ? userData.getString("youtubeUsername") : null;
             long joinTimestamp = userData.getLong("joinDate");
-            int messageCount = userData.getInteger("messageCount", 0);
+            int messagesCount = userData.getInteger("messagesCount", 0);
 
-            long currentTime = System.currentTimeMillis();
-            long daysOnServer = TimeUnit.MILLISECONDS.toDays(currentTime - joinTimestamp);
+            // Calcul de la réputation
+            int reputationScore = userData.getInteger("reputationScore", 0);
+            String reputationRank = ReputationManager.getReputationRank(reputationScore);
 
             // Formatage de la date
             Date joinDate = new Date(joinTimestamp);
@@ -90,8 +79,7 @@ public class ComRank extends Command {
 
             try {
                 BufferedImage avatar = getUserAvatar(e.getUser());
-                ByteArrayOutputStream outputStream = generateModernPlayerCard(username, teamName, formattedDate, ordinal,
-                        rank, youtubeLinked, youtubeUsername, teamColor, logoPath, avatar, messageCount, daysOnServer);
+                ByteArrayOutputStream outputStream = generateModernPlayerCard(username, teamName, formattedDate, ordinal, rank, teamColor, logoPath, avatar, messagesCount, reputationRank);
                 e.getHook().sendFiles(FileUpload.fromData(outputStream.toByteArray(), username + "_rank.png")).queue();
             } catch (Exception ex) {
                 e.getHook().sendMessage("Erreur lors de la génération de la carte de rang : " + ex.getMessage()).queue();
@@ -102,7 +90,7 @@ public class ComRank extends Command {
         }
     }
 
-    private ByteArrayOutputStream generateModernPlayerCard(String username, String teamName, String draftDate, String roundPick, String rank, boolean youtubeLinked, String youtubeUsername, Color teamColor, String logoPath, BufferedImage avatar, int messageCount, long daysOnServer) throws IOException {
+    private ByteArrayOutputStream generateModernPlayerCard(String username, String teamName, String draftDate, String roundPick, String rank, Color teamColor, String logoPath, BufferedImage avatar, int messagesCount, String reputationRank) throws IOException {
         int width = 800;
         int height = 500;
 
@@ -116,12 +104,9 @@ public class ComRank extends Command {
         g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
 
         // Main background - use team color to black gradient
-        Color darkTeamColor = getDarkerColor(teamColor, 0.5f); // Create darker version of team color
+        Color darkTeamColor = getDarkerColor(teamColor);
         Color black = new Color(0, 0, 10);
-        GradientPaint backgroundGradient = new GradientPaint(
-                0, 0, darkTeamColor,
-                0, height, black
-        );
+        GradientPaint backgroundGradient = new GradientPaint(0, 0, darkTeamColor, 0, height, black);
         g2d.setPaint(backgroundGradient);
         g2d.fillRect(0, 0, width, height);
 
@@ -153,7 +138,7 @@ public class ComRank extends Command {
         drawInfoBar(g2d, width, infoBarY, teamName, roundPick);
 
         // Stats section using the provided team color
-        drawStatsSection(g2d, width, infoBarY + 70, messageCount, draftDate, daysOnServer, youtubeLinked, youtubeUsername, teamColor);
+        drawInfosSection(g2d, width, infoBarY + 70, messagesCount, draftDate, teamColor, reputationRank);
 
         g2d.dispose();
 
@@ -163,39 +148,19 @@ public class ComRank extends Command {
         return outputStream;
     }
 
-    // Helper method to create a darker version of a color
-    private Color getDarkerColor(Color original, float factor) {
-        float[] hsbValues = Color.RGBtoHSB(
-                original.getRed(),
-                original.getGreen(),
-                original.getBlue(),
-                null
-        );
-        // Decrease brightness while keeping hue and saturation
-        hsbValues[2] = Math.max(0, hsbValues[2] * factor); // brightness
-        return Color.getHSBColor(hsbValues[0], hsbValues[1], hsbValues[2]);
-    }
-
-    // The rest of the methods remain unchanged
     private void drawHeader(Graphics2D g2d, String username, String rank, int width, BufferedImage avatar, String logoPath) {
-        // Logo de l'équipe à gauche
         int logoSize = 80;
         int logoX = 60;
         int logoY = 50;
-
-        // Charger le logo de l'équipe
         try {
             if (logoPath != null && !logoPath.isEmpty()) {
                 BufferedImage logo = loadImage(logoPath);
-
-                // Dessiner le logo en cercle
                 BufferedImage circularLogo = new BufferedImage(logoSize, logoSize, BufferedImage.TYPE_INT_ARGB);
                 Graphics2D logoG2d = circularLogo.createGraphics();
                 logoG2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 logoG2d.setClip(new Ellipse2D.Float(0, 0, logoSize, logoSize));
                 logoG2d.drawImage(logo, 0, 0, logoSize, logoSize, null);
                 logoG2d.dispose();
-
                 g2d.drawImage(circularLogo, logoX, logoY, null);
             }
         } catch (Exception e) {
@@ -204,22 +169,17 @@ public class ComRank extends Command {
         }
 
         // Configurer les polices pour pouvoir calculer les dimensions
-        Font usernameFont = new Font("Arial", Font.BOLD, 68);
-        Font rankFont = new Font("Arial", Font.BOLD, 28);
-
-        // Obtenir les métriques de police pour calculer les largeurs
+        Font usernameFont = FontUtils.calculateOptimalNameFont(g2d, username, 400, 60);
+        Font rankFont = new Font("Arial", Font.BOLD, 24);
         FontMetrics usernameFontMetrics = g2d.getFontMetrics(usernameFont);
+        FontMetrics rankFontMetrics = g2d.getFontMetrics(rankFont);
         int usernameWidth = usernameFontMetrics.stringWidth(username);
-
-        // Taille de l'avatar
+        int rankWidth = rankFontMetrics.stringWidth(rank);
+        int maxTextWidth = Math.max(usernameWidth, rankWidth);
         int avatarSize = 90;
-
-        // Calculer la largeur totale des éléments à centrer (avatar + espace + texte)
-        int totalContentWidth = avatarSize + 20 + usernameWidth; // 20px d'espacement
-
-        // Position de l'avatar - maintenant centré avec le nom
-        int avatarX = (width - totalContentWidth) / 2;
         int avatarY = 45;
+        int totalContentWidth = avatarSize + 20 + maxTextWidth; // 20px d'espacement
+        int avatarX = (width - totalContentWidth) / 2;
 
         // Créer l'avatar circulaire
         BufferedImage circularAvatar = new BufferedImage(avatarSize, avatarSize, BufferedImage.TYPE_INT_ARGB);
@@ -228,21 +188,26 @@ public class ComRank extends Command {
         avatarG2d.setClip(new Ellipse2D.Float(0, 0, avatarSize, avatarSize));
         avatarG2d.drawImage(avatar, 0, 0, avatarSize, avatarSize, null);
         avatarG2d.dispose();
-
-        // Dessiner l'avatar
         g2d.drawImage(circularAvatar, avatarX, avatarY, null);
 
-        // Position du nom - à droite de l'avatar
-        int textX = avatarX + avatarSize + 20; // 20px d'espace entre l'avatar et le nom
+        // Position du texte à droite de l'avatar
+        int textX = avatarX + avatarSize + 20;
+        int avatarCenterY = avatarY + (avatarSize / 2);
+        int usernameHeight = usernameFontMetrics.getHeight();
+        int rankHeight = rankFontMetrics.getHeight();
+        int textSpacing = 10;
+        int totalTextHeight = usernameHeight + textSpacing + rankHeight;
+        int usernameY = avatarCenterY - (totalTextHeight / 2) + usernameFontMetrics.getAscent() + 7;
 
         // Dessiner le nom
         g2d.setColor(Color.WHITE);
         g2d.setFont(usernameFont);
-        g2d.drawString(username, textX, 100);
+        g2d.drawString(username, textX, usernameY);
 
-        // Dessiner le rang sous le nom
+        // Dessiner le grade sous le nom
         g2d.setFont(rankFont);
-        g2d.drawString(rank, textX, 140);
+        int rankY = usernameY + textSpacing + rankFontMetrics.getAscent();
+        g2d.drawString(rank, textX, rankY);
     }
 
     private void drawInfoBar(Graphics2D g2d, int width, int y, String teamName, String roundPick) {
@@ -265,12 +230,12 @@ public class ComRank extends Command {
         g2d.drawString(infoText, textX, y + 27);
     }
 
-    private void drawStatsSection(Graphics2D g2d, int width, int startY, int messageCount, String draftDate, long daysOnServer, boolean youtubeLinked, String youtubeUsername, Color teamColor) {
-        g2d.setColor(new Color(40, 50, 60, 180)); // Couleur sombre semi-transparente
+    private void drawInfosSection(Graphics2D g2d, int width, int startY, int messagesCount, String draftDate, Color teamColor, String reputationRank) {
+        g2d.setColor(new Color(40, 50, 60, 180));
 
         // Barre d'accent latérale
         g2d.setColor(Color.GRAY);
-        g2d.fillRect(45, startY + 10, 5, 30); // Barre verticale colorée plus visible
+        g2d.fillRect(45, startY + 10, 5, 30);
 
         // Texte du titre
         g2d.setFont(new Font("Arial", Font.BOLD, 20));
@@ -278,15 +243,15 @@ public class ComRank extends Command {
         g2d.drawString("INFORMATIONS", 60, startY + 30);
 
         // Stats list with more spacing
-        String[] statNames = {"Messages", "Repêché le", "Youtube"};
+        String[] statNames = {"Messages", "Repêché le", "Réputation"};
         String[] statValues = {
-                String.valueOf(messageCount),
+                String.valueOf(messagesCount),
                 String.valueOf(draftDate),
-                youtubeLinked ? youtubeUsername + " | ✔" : "❌"
+                String.valueOf(reputationRank)
         };
 
-        g2d.setFont(new Font("Arial Unicode MS", Font.BOLD, 28)); // Larger font for stats
-        int lineHeight = 60; // More space between stats lines
+        g2d.setFont(new Font("Segoe UI Emoji", Font.BOLD, 28));
+        int lineHeight = 60;
 
         for (int i = 0; i < statNames.length; i++) {
             int y = startY + 75 + (i * lineHeight);
@@ -321,12 +286,6 @@ public class ComRank extends Command {
         return profileImg;
     }
 
-    /**
-     * Charge une image à partir d'un chemin qui peut être une URL ou un chemin de fichier local
-     * @param imagePath Le chemin de l'image (URL ou fichier)
-     * @return L'image chargée sous forme de BufferedImage
-     * @throws IOException Si une erreur survient lors du chargement
-     */
     private BufferedImage loadImage(String imagePath) throws IOException, URISyntaxException {
         if (imagePath == null || imagePath.isEmpty()) throw new IOException("Le chemin de l'image est vide ou null");
         BufferedImage image;
@@ -340,5 +299,11 @@ public class ComRank extends Command {
         }
         if (image == null) throw new IOException("Impossible de charger l'image: " + imagePath);
         return image;
+    }
+
+    private Color getDarkerColor(Color original) {
+        float[] hsbValues = Color.RGBtoHSB(original.getRed(), original.getGreen(), original.getBlue(), null);
+        hsbValues[2] = Math.max(0, hsbValues[2] * (float) 0.5);
+        return Color.getHSBColor(hsbValues[0], hsbValues[1], hsbValues[2]);
     }
 }

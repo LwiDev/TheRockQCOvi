@@ -1,5 +1,6 @@
-package ca.lwi.trqcbot.handlers;
+package ca.lwi.trqcbot.ressources;
 
+import ca.lwi.trqcbot.Main;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.UpdateOptions;
@@ -8,7 +9,6 @@ import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import ca.lwi.trqcbot.Main;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;

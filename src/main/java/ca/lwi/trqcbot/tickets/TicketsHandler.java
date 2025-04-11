@@ -66,8 +66,6 @@ public class TicketsHandler extends ListenerAdapter {
             if (!history.isEmpty()) {
                 ticketChannel.purgeMessages(history);
             }
-
-            // Crée et envoie le nouveau message de création de ticket
             sendTicketCreationMessage(ticketChannel);
         });
     }
@@ -86,13 +84,8 @@ public class TicketsHandler extends ListenerAdapter {
                 .addField("Délai d'inactivité", "Les tickets inactifs pendant plus d'une semaine seront automatiquement archivés.", false)
                 .build();
 
-        Button createButton = Button.primary(CREATE_TICKET_BUTTON, "Créer un ticket")
-                .withEmoji(Emoji.fromUnicode("🎫"));
-
-        channel.sendMessageEmbeds(embed)
-                .addActionRow(createButton)
-                .queue();
-
+        Button createButton = Button.primary(CREATE_TICKET_BUTTON, "Créer un ticket").withEmoji(Emoji.fromUnicode("🎫"));
+        channel.sendMessageEmbeds(embed).addActionRow(createButton).queue();
         LOGGER.info("Message de création de ticket envoyé dans le channel {}", channel.getName());
     }
 
@@ -310,7 +303,7 @@ public class TicketsHandler extends ListenerAdapter {
 
         MessageEmbed embed = new EmbedBuilder()
                 .setTitle("Ticket archivé")
-                .setDescription("Ce ticket a été archivé. Un administrateur peut le désarchiver avec la commande `/ticket unarchive`.")
+                .setDescription("Ce ticket a été archivé. Un administrateur peut le désarchiver au besoin.")
                 .setColor(Color.ORANGE)
                 .setFooter("ID du ticket: " + threadChannel.getId(), null)
                 .build();
@@ -353,7 +346,7 @@ public class TicketsHandler extends ListenerAdapter {
         }
         MessageEmbed embed = new EmbedBuilder()
                 .setTitle("Ticket archivé")
-                .setDescription("Ce ticket a été archivé par un administrateur. Un administrateur peut le désarchiver avec la commande `/ticket unarchive`.")
+                .setDescription("Ce ticket a été archivé par un administrateur. Un administrateur peut le désarchiver au besoin.")
                 .setColor(Color.ORANGE)
                 .setFooter("ID du ticket: " + threadChannel.getId(), null)
                 .build();
