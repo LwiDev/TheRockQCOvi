@@ -14,8 +14,7 @@ import java.util.concurrent.CompletableFuture;
 public class VeteranMessageHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(VeteranMessageHandler.class);
-    private static final String COLLECTION_NAME = "veteran";
-    private static final MongoCollection<Document> collection = Main.getMongoConnection().getDatabase().getCollection(COLLECTION_NAME);
+    private static final MongoCollection<Document> collection = Main.getMongoConnection().getDatabase().getCollection("messages");
     private static final String TARGET_CHANNEL_ID = "1360007105175617678";
 
     public static CompletableFuture<Void> updateVeteranMessage(boolean forceNewMessage) {
@@ -24,7 +23,7 @@ public class VeteranMessageHandler {
         try {
             TextChannel channel = Main.getJda().getTextChannelById(TARGET_CHANNEL_ID);
             if (channel == null) {
-                LOGGER.error("Resources channel with ID {} not found", TARGET_CHANNEL_ID);
+                LOGGER.error("Channel with ID {} not found", TARGET_CHANNEL_ID);
                 future.completeExceptionally(new IllegalArgumentException("Channel not found"));
                 return future;
             }
@@ -39,13 +38,13 @@ public class VeteranMessageHandler {
                             message.editMessage(messageContent).queue(
                                     updated -> future.complete(null),
                                     error -> {
-                                        LOGGER.error("Failed to update resources message: {}", error.getMessage());
+                                        LOGGER.error("Failed to update devenir-veteran message: {}", error.getMessage());
                                         createNewVeteranMessage(channel, messageContent, future);
                                     }
                             );
                         },
                         error -> {
-                            LOGGER.error("Failed to retrieve resources message: {}", error.getMessage());
+                            LOGGER.error("Failed to retrieve devenir-veteran message: {}", error.getMessage());
                             createNewVeteranMessage(channel, messageContent, future);
                         }
                 );
@@ -73,10 +72,10 @@ public class VeteranMessageHandler {
                             new UpdateOptions().upsert(true)
                     );
                     future.complete(null);
-                    LOGGER.info("New resources message created in channel {}", channel.getId());
+                    LOGGER.info("New devenir-veteran message created in channel {}", channel.getId());
                 },
                 error -> {
-                    LOGGER.error("Failed to send resources message: {}", error.getMessage());
+                    LOGGER.error("Failed to send devenir-veteran message: {}", error.getMessage());
                     future.completeExceptionally(error);
                 }
         );

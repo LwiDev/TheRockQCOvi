@@ -2,6 +2,7 @@ package ca.lwi.trqcbot.commands.list;
 
 import ca.lwi.trqcbot.Main;
 import ca.lwi.trqcbot.commands.Command;
+import ca.lwi.trqcbot.handlers.RulesMessageHandler;
 import ca.lwi.trqcbot.handlers.VeteranMessageHandler;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
@@ -35,14 +36,16 @@ public class ComTR8 extends Command {
         resourcesGroup.addSubcommands(resourcesUpdateCmd, manageCmd, viewConfigCmd);
         
         // Sous-commandes de veteran
-        SubcommandGroupData veteranGroup = new SubcommandGroupData("veteran", "Gérer le message du salon devenir-vétéran");
-        SubcommandData veteranUpdateCmd = new SubcommandData("update", "Mettre à jour le message du salon devenir-vétéran");
-        veteranUpdateCmd.addOption(OptionType.BOOLEAN, "force_new", "Créer un nouveau message même si un existe déjà", false);
-        veteranGroup.addSubcommands(veteranUpdateCmd);
+        SubcommandGroupData messagesGroup = new SubcommandGroupData("messages", "Gérer le message du salon règlement");
+        SubcommandData rulesCmd = new SubcommandData("rules", "Mettre à jour le message du salon règlement");
+        rulesCmd.addOption(OptionType.BOOLEAN, "force_new", "Créer un nouveau message même si un existe déjà", false);
+        SubcommandData veteranCmd = new SubcommandData("veteran", "Mettre à jour le message du salon devenir-vétéran");
+        veteranCmd.addOption(OptionType.BOOLEAN, "force_new", "Créer un nouveau message même si un existe déjà", false);
+        messagesGroup.addSubcommands(rulesCmd, veteranCmd);
         
         // Ajouter les sous-commandes et le groupe à la commande principale
         addSubcommands(welcomeCmd);
-        addSubcommandGroups(resourcesGroup, veteranGroup);
+        addSubcommandGroups(resourcesGroup, messagesGroup);
     }
 
     @Override
@@ -82,9 +85,13 @@ public class ComTR8 extends Command {
                     default:
                         e.reply("Sous-commande inconnue dans le groupe resources.").setEphemeral(true).queue();
                 }
-            } else if (subcommandGroup.equals("veteran")) {
+            } else if (subcommandGroup.equals("messages")) {
                 switch (subcommandName.toLowerCase()) {
-                    case "update":
+                    case "rules":
+                        e.deferReply(true).queue();
+                        handleUpdateRules(e);
+                        break;
+                    case "veteran":
                         e.deferReply(true).queue();
                         handleUpdateVeteran(e);
                         break;
@@ -126,7 +133,19 @@ public class ComTR8 extends Command {
         e.getHook().deleteOriginal().queue();
     }
 
-    // Vétéran
+    public void handleUpdateRules(SlashCommandInteractionEvent e) {
+        boolean forceNew = e.getOption("force_new") != null && Objects.requireNonNull(e.getOption("force_new")).getAsBoolean();
+        RulesMessageHandler.updateRulesMessage(forceNew)
+                .thenAccept(v -> e.getHook().sendMessage("✅ Le message a été mis à jour.").queue(message -> {
+                    message.delete().queueAfter(3, java.util.concurrent.TimeUnit.SECONDS);
+                }))
+                .exceptionally(error -> {
+                    LOGGER.error("Erreur lors de la mise à jour du message : {}", error.getMessage(), error);
+                    e.getHook().sendMessage("❌ Erreur lors de la mise à jour : " + error.getMessage()).queue();
+                    return null;
+                });
+    }
+
     public void handleUpdateVeteran(SlashCommandInteractionEvent e) {
         boolean forceNew = e.getOption("force_new") != null && Objects.requireNonNull(e.getOption("force_new")).getAsBoolean();
         VeteranMessageHandler.updateVeteranMessage(forceNew)
