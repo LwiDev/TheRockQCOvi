@@ -1,4 +1,4 @@
-package src.ca.lwi.trqcbot.handlers;
+package ca.lwi.trqcbot.handlers;
 
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
@@ -8,7 +8,7 @@ import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import src.ca.lwi.trqcbot.Main;
+import ca.lwi.trqcbot.Main;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;

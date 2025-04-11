@@ -1,4 +1,4 @@
-package src.ca.lwi.trqcbot.mongo;
+package ca.lwi.trqcbot.mongo;
 
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;

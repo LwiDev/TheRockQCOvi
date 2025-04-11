@@ -1,5 +1,13 @@
-package src.ca.lwi.trqcbot;
+package ca.lwi.trqcbot;
 
+import ca.lwi.trqcbot.commands.manager.CommandsManager;
+import ca.lwi.trqcbot.handlers.WelcomeMessageHandler;
+import ca.lwi.trqcbot.mongo.MongoConnection;
+import ca.lwi.trqcbot.mongo.MongoCredentials;
+import ca.lwi.trqcbot.ranks.RankManager;
+import ca.lwi.trqcbot.teams.TeamManager;
+import ca.lwi.trqcbot.tickets.TicketsHandler;
+import ca.lwi.trqcbot.youtube.YouTubeWatcher;
 import io.github.cdimascio.dotenv.Dotenv;
 import lombok.Getter;
 import net.dv8tion.jda.api.JDA;
@@ -8,12 +16,6 @@ import net.dv8tion.jda.api.OnlineStatus;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.requests.GatewayIntent;
-import src.ca.lwi.trqcbot.commands.manager.CommandsManager;
-import src.ca.lwi.trqcbot.handlers.WelcomeMessageHandler;
-import src.ca.lwi.trqcbot.mongo.MongoConnection;
-import src.ca.lwi.trqcbot.mongo.MongoCredentials;
-import src.ca.lwi.trqcbot.ranks.RankManager;
-import src.ca.lwi.trqcbot.teams.TeamManager;
 
 public class Main {
 
@@ -25,6 +27,8 @@ public class Main {
     private static RankManager rankManager;
     @Getter
     private static TeamManager teamManager;
+    @Getter
+    private static TicketsHandler ticketsHandler;
     @Getter
     private static WelcomeMessageHandler welcomeMessageHandler;
 
@@ -44,25 +48,24 @@ public class Main {
 
         rankManager = new RankManager();
         teamManager = new TeamManager();
+        ticketsHandler = new TicketsHandler();
+        welcomeMessageHandler = new WelcomeMessageHandler();
+        YouTubeWatcher watcher = new YouTubeWatcher();
 
-//        new Log().init(new BotCommandManager());
         jda = JDABuilder
                 .create(dotenv.get("DISC_TOKEN"), GatewayIntent.GUILD_MEMBERS, GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT)
                 .setStatus(OnlineStatus.DO_NOT_DISTURB)
                 .setActivity(Activity.playing("Match de Hockey"))
                 .addEventListeners(rankManager)
+                .addEventListeners(ticketsHandler)
                 .addEventListeners(new CommandsManager())
                 .build();
 
-        welcomeMessageHandler = new WelcomeMessageHandler();
+        watcher.start(jda);
     }
 
     public static boolean isTR8Guild(Guild guild) {
         Dotenv dotenv = Dotenv.load();
         return guild != null && guild.getId().equals(dotenv.get("GUILD_ID"));
-    }
-
-    public static String getDiscordName() {
-        return "Dans le Mix | TheRockQC";
     }
 }

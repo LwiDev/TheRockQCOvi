@@ -1,7 +1,6 @@
-package src.ca.lwi.trqcbot.commands.list;
+package ca.lwi.trqcbot.commands.list;
 
 import com.mongodb.client.MongoCollection;
-import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.channel.ChannelType;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildChannel;
@@ -22,9 +21,9 @@ import org.bson.Document;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import src.ca.lwi.trqcbot.Main;
-import src.ca.lwi.trqcbot.commands.Command;
-import src.ca.lwi.trqcbot.handlers.ResourcesMessageHandler;
+import ca.lwi.trqcbot.Main;
+import ca.lwi.trqcbot.commands.Command;
+import ca.lwi.trqcbot.handlers.ResourcesMessageHandler;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;

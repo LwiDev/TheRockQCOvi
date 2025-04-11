@@ -1,5 +1,7 @@
-package src.ca.lwi.trqcbot.ranks;
+package ca.lwi.trqcbot.ranks;
 
+import ca.lwi.trqcbot.Main;
+import com.google.api.services.youtube.YouTube;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.UpdateOptions;
@@ -13,7 +15,6 @@ import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.bson.Document;
 import org.jetbrains.annotations.NotNull;
-import src.ca.lwi.trqcbot.Main;
 
 import java.util.Date;
 import java.util.HashMap;
@@ -34,7 +35,10 @@ public class RankManager extends ListenerAdapter {
     private final String youtubeApiKey;
     private final Map<String, Integer> userActivityCounter = new HashMap<>();
     private final int activityThreshold;
-    
+
+    private YouTube youtubeService;
+    private final String youtubeVerificationChannelId;
+
     public RankManager() {
         // Chargement des variables d'environnement avec dotenv
         Dotenv dotenv = Dotenv.load();
@@ -44,9 +48,10 @@ public class RankManager extends ListenerAdapter {
         this.veteranRoleId = dotenv.get("VETERAN_ROLE_ID");
         this.youtubeChannelId = dotenv.get("YOUTUBE_CHANNEL_ID");
         this.youtubeApiKey = dotenv.get("YOUTUBE_API_KEY");
+        this.youtubeVerificationChannelId = dotenv.get("YOUTUBE_VERIFICATION_CHANNEL_ID");
         this.activityThreshold = Integer.parseInt(dotenv.get("ACTIVITY_THRESHOLD"));
         this.userCollection = Main.getMongoConnection().getDatabase().getCollection("users");
-        
+
         // Planifier une vérification périodique des activités
         ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
         scheduler.scheduleAtFixedRate(this::checkUsersActivity, 1, 12, TimeUnit.HOURS);
@@ -75,14 +80,9 @@ public class RankManager extends ListenerAdapter {
     
     @Override
     public void onMessageReceived(@NotNull MessageReceivedEvent event) {
-        // Ignorer les messages des bots
         if (event.getAuthor().isBot()) return;
-        
-        // Augmenter le compteur d'activité de l'utilisateur
         String userId = event.getAuthor().getId();
         userActivityCounter.put(userId, userActivityCounter.getOrDefault(userId, 0) + 1);
-        
-        // Si l'utilisateur a envoyé 5 messages, mettre à jour la BD et vérifier le niveau
         if (userActivityCounter.getOrDefault(userId, 0) % 5 == 0) {
             incrementUserActivity(userId);
         }

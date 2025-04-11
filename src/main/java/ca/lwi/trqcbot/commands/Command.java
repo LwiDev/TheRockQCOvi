@@ -1,4 +1,4 @@
-package src.ca.lwi.trqcbot.commands;
+package ca.lwi.trqcbot.commands;
 
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.internal.interactions.CommandDataImpl;

@@ -1,4 +1,4 @@
-package src.ca.lwi.trqcbot.commands.manager;
+package ca.lwi.trqcbot.commands.manager;
 
 import net.dv8tion.jda.api.events.guild.GuildJoinEvent;
 import net.dv8tion.jda.api.events.guild.GuildReadyEvent;
@@ -6,8 +6,8 @@ import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEve
 import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.jetbrains.annotations.NotNull;
-import src.ca.lwi.trqcbot.commands.Command;
-import src.ca.lwi.trqcbot.commands.list.*;
+import ca.lwi.trqcbot.commands.Command;
+import ca.lwi.trqcbot.commands.list.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,11 +22,10 @@ public class CommandsManager extends ListenerAdapter {
     }
 
     public void registerCommands(){
-        registerCommand(new ComLink());
         registerCommand(new ComRank());
         registerCommand(new ComResources());
+        registerCommand(new ComTicket());
         registerCommand(new ComTR8());
-        registerCommand(new ComVerify());
     }
 
     private void registerCommand(Command command) {

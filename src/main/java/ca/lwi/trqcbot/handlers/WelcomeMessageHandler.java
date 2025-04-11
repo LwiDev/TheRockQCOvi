@@ -1,4 +1,4 @@
-package src.ca.lwi.trqcbot.handlers;
+package ca.lwi.trqcbot.handlers;
 
 import com.mongodb.client.MongoCollection;
 import net.dv8tion.jda.api.entities.Guild;
@@ -8,8 +8,8 @@ import net.dv8tion.jda.api.utils.FileUpload;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import src.ca.lwi.trqcbot.Main;
-import src.ca.lwi.trqcbot.utils.TeamSelectionResult;
+import ca.lwi.trqcbot.Main;
+import ca.lwi.trqcbot.utils.TeamSelectionResult;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
@@ -37,7 +37,7 @@ public class WelcomeMessageHandler {
 
     public WelcomeMessageHandler() {
         this.teamsCollection = Main.getMongoConnection().getDatabase().getCollection("teams");
-        this.draftHistoryCollection = Main.getMongoConnection().getDatabase().getCollection("draft_history");
+        this.draftHistoryCollection = Main.getMongoConnection().getDatabase().getCollection("data_history");
         this.random = new Random();
         this.tradeChance = 5;
     }

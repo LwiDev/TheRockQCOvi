@@ -1,14 +1,13 @@
-package src.ca.lwi.trqcbot.commands.list;
+package ca.lwi.trqcbot.commands.list;
 
+import ca.lwi.trqcbot.Main;
+import ca.lwi.trqcbot.commands.Command;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.utils.FileUpload;
 import org.bson.Document;
-import src.ca.lwi.trqcbot.Main;
-import src.ca.lwi.trqcbot.commands.Command;
-import sun.misc.Launcher;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
@@ -17,7 +16,8 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.net.URL;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLConnection;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -102,13 +102,9 @@ public class ComRank extends Command {
         }
     }
 
-    private ByteArrayOutputStream generateModernPlayerCard(String username, String teamName, String draftDate,
-                                                           String roundPick, String rank, boolean youtubeLinked,
-                                                           String youtubeUsername, Color teamColor,
-                                                           String logoPath, BufferedImage avatar, int messageCount, long daysOnServer) throws IOException {
-        // Adjust dimensions for better proportions
+    private ByteArrayOutputStream generateModernPlayerCard(String username, String teamName, String draftDate, String roundPick, String rank, boolean youtubeLinked, String youtubeUsername, Color teamColor, String logoPath, BufferedImage avatar, int messageCount, long daysOnServer) throws IOException {
         int width = 800;
-        int height = 500; // Increased height for better proportions
+        int height = 500;
 
         // Base image with team color to dark gradient background
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
@@ -132,35 +128,32 @@ public class ComRank extends Command {
         // Draw logo in background if available
         try {
             if (logoPath != null && !logoPath.isEmpty()) {
-                // Load team logo and draw it faded in the background
-                BufferedImage logo = ImageIO.read(new File(logoPath));
-
-                // Calculate dimensions to center and scale the logo properly
-                int logoSize = Math.min(width, height) - 100; // Leave some margin
+                BufferedImage logo = loadImage(logoPath);
+                int infoBarY = 180;
+                int logoSize = Math.min(width, height) - 100;
                 int logoX = (width - logoSize) / 2;
-                int logoY = (height - logoSize) / 2;
-
-                // Apply watermark effect
-                float alpha = 0.15f; // Very transparent
+                int logoY = infoBarY + 40;
+                float alpha = 0.15f;
                 AlphaComposite alphaComposite = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha);
                 g2d.setComposite(alphaComposite);
                 g2d.drawImage(logo, logoX, logoY, logoSize, logoSize, null);
-                g2d.setComposite(AlphaComposite.SrcOver); // Reset to default
+                g2d.setComposite(AlphaComposite.SrcOver);
             }
         } catch (Exception e) {
             // Log error or handle exception
             System.err.println("Error loading logo: " + e.getMessage());
+            e.printStackTrace();
         }
 
         // Draw header with user info
-        drawHeader(g2d, username, rank, width, avatar);
+        drawHeader(g2d, username, rank, width, avatar, logoPath);
 
         // Info bar with team and draft pick
         int infoBarY = 180;
         drawInfoBar(g2d, width, infoBarY, teamName, roundPick);
 
         // Stats section using the provided team color
-        drawStatsSection(g2d, width, height, infoBarY + 70, messageCount, daysOnServer, youtubeLinked, youtubeUsername, teamColor);
+        drawStatsSection(g2d, width, infoBarY + 70, messageCount, draftDate, daysOnServer, youtubeLinked, youtubeUsername, teamColor);
 
         g2d.dispose();
 
@@ -184,13 +177,51 @@ public class ComRank extends Command {
     }
 
     // The rest of the methods remain unchanged
-    private void drawHeader(Graphics2D g2d, String username, String rank, int width, BufferedImage avatar) {
-        // Draw avatar on left side
-        int avatarSize = 110; // Slightly larger avatar
-        int avatarX = 60;
-        int avatarY = 35;
+    private void drawHeader(Graphics2D g2d, String username, String rank, int width, BufferedImage avatar, String logoPath) {
+        // Logo de l'équipe à gauche
+        int logoSize = 80;
+        int logoX = 60;
+        int logoY = 50;
 
-        // Create circular avatar using the provided avatar image
+        // Charger le logo de l'équipe
+        try {
+            if (logoPath != null && !logoPath.isEmpty()) {
+                BufferedImage logo = loadImage(logoPath);
+
+                // Dessiner le logo en cercle
+                BufferedImage circularLogo = new BufferedImage(logoSize, logoSize, BufferedImage.TYPE_INT_ARGB);
+                Graphics2D logoG2d = circularLogo.createGraphics();
+                logoG2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                logoG2d.setClip(new Ellipse2D.Float(0, 0, logoSize, logoSize));
+                logoG2d.drawImage(logo, 0, 0, logoSize, logoSize, null);
+                logoG2d.dispose();
+
+                g2d.drawImage(circularLogo, logoX, logoY, null);
+            }
+        } catch (Exception e) {
+            System.err.println("Erreur lors du chargement du logo:");
+            e.printStackTrace();
+        }
+
+        // Configurer les polices pour pouvoir calculer les dimensions
+        Font usernameFont = new Font("Arial", Font.BOLD, 68);
+        Font rankFont = new Font("Arial", Font.BOLD, 28);
+
+        // Obtenir les métriques de police pour calculer les largeurs
+        FontMetrics usernameFontMetrics = g2d.getFontMetrics(usernameFont);
+        int usernameWidth = usernameFontMetrics.stringWidth(username);
+
+        // Taille de l'avatar
+        int avatarSize = 90;
+
+        // Calculer la largeur totale des éléments à centrer (avatar + espace + texte)
+        int totalContentWidth = avatarSize + 20 + usernameWidth; // 20px d'espacement
+
+        // Position de l'avatar - maintenant centré avec le nom
+        int avatarX = (width - totalContentWidth) / 2;
+        int avatarY = 45;
+
+        // Créer l'avatar circulaire
         BufferedImage circularAvatar = new BufferedImage(avatarSize, avatarSize, BufferedImage.TYPE_INT_ARGB);
         Graphics2D avatarG2d = circularAvatar.createGraphics();
         avatarG2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -198,29 +229,20 @@ public class ComRank extends Command {
         avatarG2d.drawImage(avatar, 0, 0, avatarSize, avatarSize, null);
         avatarG2d.dispose();
 
-        // Draw the circular avatar
+        // Dessiner l'avatar
         g2d.drawImage(circularAvatar, avatarX, avatarY, null);
 
-        // Username in LARGE CAPS (centered)
-        g2d.setColor(Color.WHITE);
-        Font usernameFont = new Font("Arial", Font.BOLD, 68); // Slightly larger
-        g2d.setFont(usernameFont);
+        // Position du nom - à droite de l'avatar
+        int textX = avatarX + avatarSize + 20; // 20px d'espace entre l'avatar et le nom
 
-        // Center text
-        FontMetrics metrics = g2d.getFontMetrics(usernameFont);
-        int textWidth = metrics.stringWidth(username);
-        int textX = (width - textWidth) / 2;
+        // Dessiner le nom
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(usernameFont);
         g2d.drawString(username, textX, 100);
 
-        // Rank below username
-        g2d.setColor(Color.WHITE);
-        Font rankFont = new Font("Arial", Font.BOLD, 38); // Slightly larger
+        // Dessiner le rang sous le nom
         g2d.setFont(rankFont);
-
-        metrics = g2d.getFontMetrics(rankFont);
-        textWidth = metrics.stringWidth(rank);
-        textX = (width - textWidth) / 2;
-        g2d.drawString(rank, textX, 150);
+        g2d.drawString(rank, textX, 140);
     }
 
     private void drawInfoBar(Graphics2D g2d, int width, int y, String teamName, String roundPick) {
@@ -229,7 +251,7 @@ public class ComRank extends Command {
         g2d.fillRect(0, y, width, 40);
 
         // Format: "Team Name | #Pick" - all on one line and centered
-        String infoText = teamName + " | #" + roundPick + "e";
+        String infoText = teamName + " | #" + roundPick;
 
         // Draw text in black, centered
         g2d.setColor(Color.BLACK);
@@ -243,26 +265,31 @@ public class ComRank extends Command {
         g2d.drawString(infoText, textX, y + 27);
     }
 
-    private void drawStatsSection(Graphics2D g2d, int width, int height, int startY, int messageCount,
-                                  long daysOnServer, boolean youtubeLinked, String youtubeUsername, Color teamColor) {
-        // Stats header using the provided team color
-        g2d.setColor(teamColor);
+    private void drawStatsSection(Graphics2D g2d, int width, int startY, int messageCount, String draftDate, long daysOnServer, boolean youtubeLinked, String youtubeUsername, Color teamColor) {
+        g2d.setColor(new Color(40, 50, 60, 180)); // Couleur sombre semi-transparente
+
+        // Barre d'accent latérale
+        g2d.setColor(Color.GRAY);
+        g2d.fillRect(45, startY + 10, 5, 30); // Barre verticale colorée plus visible
+
+        // Texte du titre
         g2d.setFont(new Font("Arial", Font.BOLD, 20));
-        g2d.drawString("STATS", 60, startY + 30);
+        g2d.setColor(teamColor);
+        g2d.drawString("INFORMATIONS", 60, startY + 30);
 
         // Stats list with more spacing
-        String[] statNames = {"MESSAGES", "JOURS SUR LE SERVEUR", "YOUTUBE"};
+        String[] statNames = {"Messages", "Repêché le", "Youtube"};
         String[] statValues = {
                 String.valueOf(messageCount),
-                String.valueOf(daysOnServer),
-                youtubeLinked ? "LIÉ - " + youtubeUsername : "NON LIÉ"
+                String.valueOf(draftDate),
+                youtubeLinked ? youtubeUsername + " | ✔" : "❌"
         };
 
-        g2d.setFont(new Font("Arial", Font.BOLD, 32)); // Larger font for stats
+        g2d.setFont(new Font("Arial Unicode MS", Font.BOLD, 28)); // Larger font for stats
         int lineHeight = 60; // More space between stats lines
 
         for (int i = 0; i < statNames.length; i++) {
-            int y = startY + 90 + (i * lineHeight);
+            int y = startY + 75 + (i * lineHeight);
 
             // Stat name
             g2d.setColor(Color.WHITE);
@@ -282,15 +309,36 @@ public class ComRank extends Command {
         }
     }
 
-    public static BufferedImage getUserAvatar(User user) throws IOException {
-        URLConnection connection = new URL(user.getAvatarUrl() != null ? user.getAvatarUrl() : user.getDefaultAvatarUrl()).openConnection();
+    public static BufferedImage getUserAvatar(User user) throws IOException, URISyntaxException {
+        URLConnection connection = new URI(user.getAvatarUrl() != null ? user.getAvatarUrl() : user.getDefaultAvatarUrl()).toURL().openConnection();
         connection.setRequestProperty("User-Agent", "bot emily-bot");
         BufferedImage profileImg;
         try {
             profileImg = ImageIO.read(connection.getInputStream());
         } catch (Exception ignored) {
-            profileImg = ImageIO.read(Objects.requireNonNull(Launcher.class.getClassLoader().getResource("default_profile.jpg")));
+            profileImg = ImageIO.read(Objects.requireNonNull(ComRank.class.getClassLoader().getResource("default_profile.jpg")));
         }
         return profileImg;
+    }
+
+    /**
+     * Charge une image à partir d'un chemin qui peut être une URL ou un chemin de fichier local
+     * @param imagePath Le chemin de l'image (URL ou fichier)
+     * @return L'image chargée sous forme de BufferedImage
+     * @throws IOException Si une erreur survient lors du chargement
+     */
+    private BufferedImage loadImage(String imagePath) throws IOException, URISyntaxException {
+        if (imagePath == null || imagePath.isEmpty()) throw new IOException("Le chemin de l'image est vide ou null");
+        BufferedImage image;
+        if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+            URI uri = new URI(imagePath);
+            URLConnection connection = uri.toURL().openConnection();
+            connection.setRequestProperty("User-Agent", "bot emily-bot");
+            image = ImageIO.read(connection.getInputStream());
+        } else {
+            image = ImageIO.read(new File(imagePath));
+        }
+        if (image == null) throw new IOException("Impossible de charger l'image: " + imagePath);
+        return image;
     }
 }

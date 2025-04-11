@@ -1,4 +1,4 @@
-package src.ca.lwi.trqcbot.commands.list;
+package ca.lwi.trqcbot.commands.list;
 
 import io.github.cdimascio.dotenv.Dotenv;
 import net.dv8tion.jda.api.entities.Guild;
@@ -12,8 +12,8 @@ import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import src.ca.lwi.trqcbot.Main;
-import src.ca.lwi.trqcbot.commands.Command;
+import ca.lwi.trqcbot.Main;
+import ca.lwi.trqcbot.commands.Command;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;

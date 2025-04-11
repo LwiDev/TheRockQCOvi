@@ -1,4 +1,4 @@
-package src.ca.lwi.trqcbot.mongo;
+package ca.lwi.trqcbot.mongo;
 
 import lombok.Data;
 

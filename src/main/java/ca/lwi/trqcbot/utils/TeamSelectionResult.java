@@ -1,4 +1,4 @@
-package src.ca.lwi.trqcbot.utils;
+package ca.lwi.trqcbot.utils;
 
 import org.bson.Document;
 
