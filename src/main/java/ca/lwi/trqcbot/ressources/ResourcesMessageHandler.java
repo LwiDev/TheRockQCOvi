@@ -10,9 +10,7 @@ import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -173,11 +171,6 @@ public class ResourcesMessageHandler {
             }
             message.append("\n");
         }
-
-        // Footer with update timestamp
-        SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy à HH:mm");
-        message.append("*Mis à jour le ").append(sdf.format(new Date())).append("*");
-
         return message.toString();
     }
 

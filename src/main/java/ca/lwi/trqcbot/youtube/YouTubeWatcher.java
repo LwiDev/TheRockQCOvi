@@ -6,13 +6,13 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mongodb.client.MongoCollection;
 import io.github.cdimascio.dotenv.Dotenv;
-import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import org.bson.Document;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.awt.*;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -22,6 +22,8 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 public class YouTubeWatcher {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(YouTubeWatcher.class);
 
     private final String discordChannelExclusives;
     private final String discordChannelVideos;
@@ -65,39 +67,45 @@ public class YouTubeWatcher {
 
                             // Vérification si c'est une vidéo "members only"
                             if (isMembersOnly(title)) {
-                                // Envoi dans le salon pour membres payants
                                 TextChannel salonExclusives = jda.getTextChannelById(discordChannelExclusives);
-                                if (salonExclusives != null) {
-                                    EmbedBuilder embed = new EmbedBuilder();
-                                    embed.setTitle(title, urlVideo);
-                                    embed.setDescription(":star: **Vidéo exclusive pour les membres !**");
-                                    embed.setColor(Color.decode("#0055A4"));
-                                    embed.setFooter("TheRockQC - du contenu premium!");
-
-                                    salonExclusives.sendMessage("<@&" + veteranRoleId + ">").setEmbeds(embed.build()).queue();
-                                }
+                                if (salonExclusives != null) sendMessage(salonExclusives, title, urlVideo, true);
                             } else {
-                                // Envoi dans le salon public (vidéo normale)
                                 TextChannel salonVideos = jda.getTextChannelById(discordChannelVideos);
-                                if (salonVideos != null) {
-                                    EmbedBuilder embed = new EmbedBuilder();
-                                    embed.setTitle(title, urlVideo);
-                                    embed.setDescription(":hockey: **Nouvelle vidéo !** :goal_net:");
-                                    embed.setColor(Color.decode("#0055A4"));
-                                    embed.setFooter("TheRockQC - du contenu en power play!");
-
-                                    salonVideos.sendMessage("<@&" + videoRoleId + ">").setEmbeds(embed.build()).queue();
-                                }
+                                if (salonVideos != null) sendMessage(salonVideos, title, urlVideo, false);
                             }
                         }
                     }
 
-                } catch (Exception e) {
-                    e.printStackTrace();
+                } catch (Exception ex) {
+                    LOGGER.error("Erreur lors de l'exécution du watcher : {}", ex.getMessage());
                 }
             }
-        }, 0, 5 * 60 * 1000);
+        }, 0, 5*60*1000);
     }
+
+    private void sendMessage(TextChannel channel, String title, String urlVideo, boolean exclusive) {
+        String message;
+        if (exclusive) {
+            message = "🎖️ **Vétérans, à l’appel !**\n" +
+                    "🔥 TheRock vient de publier une **nouvelle vidéo**, et vous êtes parmi les premiers à en être informés.\n\n" +
+                    "📌 **" + title + "**\n" +
+                    "🔗 [Regardez-la en avant-première ici](" + urlVideo + ")\n\n" +
+                    "🙏 Merci pour votre soutien. C’est grâce à vous que l’aventure continue !\n" +
+                    "Vos commentaires comptent plus que jamais 💬\n \n" +
+                    "||<@&" + veteranRoleId + ">||";
+        } else {
+            message = "@everyone 📢 **Nouvelle vidéo en ligne !**\n" +
+                    "🎬 TheRock vient tout juste de sortir une **nouvelle vidéo**, et ça vaut le détour !\n\n" +
+                    "📌 **" + title + "**\n" +
+                    "🔗 [Clique ici pour la regarder](" + urlVideo + ")\n\n" +
+                    "💬 Vos retours comptent — passez voir ça et faites entendre votre voix dans les commentaires !\n" +
+                    "Merci de faire partie de l'équipe 🙌\n \n" +
+                    "||@everyone||";
+        }
+        channel.sendMessage(message).queue();
+    }
+
+
 
     @NotNull
     private JsonObject getJsonObject() throws IOException, URISyntaxException {
@@ -105,15 +113,12 @@ public class YouTubeWatcher {
         HttpURLConnection conn = (HttpURLConnection) new URI(url).toURL().openConnection();
         conn.setRequestMethod("GET");
         conn.connect();
-
         Scanner scanner = new Scanner(conn.getInputStream());
         StringBuilder inline = new StringBuilder();
         while (scanner.hasNext()) {
             inline.append(scanner.nextLine());
         }
         scanner.close();
-
-        // Utilisation de JsonParser pour créer un JsonObject à partir d'une chaîne
         return JsonParser.parseString(inline.toString()).getAsJsonObject();
     }
 

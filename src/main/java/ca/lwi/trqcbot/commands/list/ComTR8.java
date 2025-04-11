@@ -2,6 +2,7 @@ package ca.lwi.trqcbot.commands.list;
 
 import ca.lwi.trqcbot.Main;
 import ca.lwi.trqcbot.commands.Command;
+import ca.lwi.trqcbot.donations.DonationsHandler;
 import ca.lwi.trqcbot.handlers.RulesMessageHandler;
 import ca.lwi.trqcbot.handlers.VeteranMessageHandler;
 import net.dv8tion.jda.api.entities.Guild;
@@ -35,17 +36,26 @@ public class ComTR8 extends Command {
         SubcommandData viewConfigCmd = new SubcommandData("view", "Afficher la configuration actuelle des ressources");
         resourcesGroup.addSubcommands(resourcesUpdateCmd, manageCmd, viewConfigCmd);
         
-        // Sous-commandes de veteran
+        // Sous-commandes de messages
         SubcommandGroupData messagesGroup = new SubcommandGroupData("messages", "Gérer le message du salon règlement");
         SubcommandData rulesCmd = new SubcommandData("rules", "Mettre à jour le message du salon règlement");
         rulesCmd.addOption(OptionType.BOOLEAN, "force_new", "Créer un nouveau message même si un existe déjà", false);
         SubcommandData veteranCmd = new SubcommandData("veteran", "Mettre à jour le message du salon devenir-vétéran");
         veteranCmd.addOption(OptionType.BOOLEAN, "force_new", "Créer un nouveau message même si un existe déjà", false);
         messagesGroup.addSubcommands(rulesCmd, veteranCmd);
-        
+
+        // Sous-commandes de Donations
+        SubcommandGroupData donationsGroup = new SubcommandGroupData("dons", "Gérer le message du salon règlement");
+        SubcommandData showDonorCmd = new SubcommandData("update", "Afficher le tableau des donateurs");
+        showDonorCmd.addOption(OptionType.BOOLEAN, "force_new", "Créer un nouveau message même si un existe déjà", false);
+        SubcommandData addToDonorCmd = new SubcommandData("add", "Ajouter un don à un donateur existant");
+        SubcommandData addNewDonorCmd = new SubcommandData("new", "Ajouter un nouveau donateur");
+        SubcommandData viewCmd = new SubcommandData("view", "Voir la liste des donateurs de façon interactive");
+        donationsGroup.addSubcommands(showDonorCmd, addToDonorCmd, addNewDonorCmd, viewCmd);
+
         // Ajouter les sous-commandes et le groupe à la commande principale
         addSubcommands(welcomeCmd);
-        addSubcommandGroups(resourcesGroup, messagesGroup);
+        addSubcommandGroups(resourcesGroup, messagesGroup, donationsGroup);
     }
 
     @Override
@@ -69,43 +79,65 @@ public class ComTR8 extends Command {
         }
 
         try {
-            if (subcommandGroup.equals("resources")) {
-                switch (subcommandName.toLowerCase()) {
-                    case "update":
-                        e.deferReply(true).queue();
-                        Main.getResourcesManager().handleUpdate(e);
-                        break;
-                    case "manage":
-                        Main.getResourcesManager().handleManage(e);
-                        break;
-                    case "view":
-                        e.deferReply(true).queue();
-                        Main.getResourcesManager().handleViewConfig(e);
-                        break;
-                    default:
-                        e.reply("Sous-commande inconnue dans le groupe resources.").setEphemeral(true).queue();
+            switch (subcommandGroup) {
+                case "dons" -> {
+                    switch (subcommandName.toLowerCase()) {
+                        case "update":
+                            e.deferReply(true).queue();
+                            Main.getDonationsManager().handleUpdateDonors(e);
+                            break;
+                        case "add":
+                            Main.getDonationsManager().handleAddToDonor(e);
+                            break;
+                        case "new":
+                            e.deferReply(true).queue();
+                            Main.getDonationsManager().handleAddNewDonor(e);
+                            break;
+                        case "view":
+                            handleViewDonors(e);
+                            break;
+                        default:
+                            e.reply("Sous-commande inconnue dans le groupe donations.").setEphemeral(true).queue();
+                    }
                 }
-            } else if (subcommandGroup.equals("messages")) {
-                switch (subcommandName.toLowerCase()) {
-                    case "rules":
-                        e.deferReply(true).queue();
-                        handleUpdateRules(e);
-                        break;
-                    case "veteran":
-                        e.deferReply(true).queue();
-                        handleUpdateVeteran(e);
-                        break;
-                    default:
-                        e.reply("Sous-commande inconnue dans le groupe vétéran.").setEphemeral(true).queue();
+                case "resources" -> {
+                    switch (subcommandName.toLowerCase()) {
+                        case "update":
+                            e.deferReply(true).queue();
+                            Main.getResourcesManager().handleUpdate(e);
+                            break;
+                        case "manage":
+                            Main.getResourcesManager().handleManage(e);
+                            break;
+                        case "view":
+                            e.deferReply(true).queue();
+                            Main.getResourcesManager().handleViewConfig(e);
+                            break;
+                        default:
+                            e.reply("Sous-commande inconnue dans le groupe resources.").setEphemeral(true).queue();
+                    }
                 }
-            } else {
-                switch (subcommandName.toLowerCase()) {
-                    case "welcome":
+                case "messages" -> {
+                    switch (subcommandName.toLowerCase()) {
+                        case "rules":
+                            e.deferReply(true).queue();
+                            handleUpdateRules(e);
+                            break;
+                        case "veteran":
+                            e.deferReply(true).queue();
+                            handleUpdateVeteran(e);
+                            break;
+                        default:
+                            e.reply("Sous-commande inconnue dans le groupe vétéran.").setEphemeral(true).queue();
+                    }
+                }
+                default -> {
+                    if (subcommandName.equalsIgnoreCase("welcome")) {
                         e.deferReply(true).queue();
                         handleWelcomeMessage(e);
-                        break;
-                    default:
+                    } else {
                         e.reply("Sous-commande inconnue.").setEphemeral(true).queue();
+                    }
                 }
             }
         } catch (Exception ex) {
@@ -133,7 +165,7 @@ public class ComTR8 extends Command {
         e.getHook().deleteOriginal().queue();
     }
 
-    public void handleUpdateRules(SlashCommandInteractionEvent e) {
+    private void handleUpdateRules(SlashCommandInteractionEvent e) {
         boolean forceNew = e.getOption("force_new") != null && Objects.requireNonNull(e.getOption("force_new")).getAsBoolean();
         RulesMessageHandler.updateRulesMessage(forceNew)
                 .thenAccept(v -> e.getHook().sendMessage("✅ Le message a été mis à jour.").queue(message -> {
@@ -146,7 +178,7 @@ public class ComTR8 extends Command {
                 });
     }
 
-    public void handleUpdateVeteran(SlashCommandInteractionEvent e) {
+    private void handleUpdateVeteran(SlashCommandInteractionEvent e) {
         boolean forceNew = e.getOption("force_new") != null && Objects.requireNonNull(e.getOption("force_new")).getAsBoolean();
         VeteranMessageHandler.updateVeteranMessage(forceNew)
                 .thenAccept(v -> e.getHook().sendMessage("✅ Le message a été mis à jour.").queue(message -> {
@@ -157,5 +189,12 @@ public class ComTR8 extends Command {
                     e.getHook().sendMessage("❌ Erreur lors de la mise à jour : " + error.getMessage()).queue();
                     return null;
                 });
+    }
+
+    private void handleViewDonors(SlashCommandInteractionEvent event) {
+        String userId = event.getUser().getId();
+        var embed = DonationsHandler.getPageEmbed(userId, 0);
+        var buttons = DonationsHandler.createPaginationButtons(userId);
+        event.replyEmbeds(embed).addActionRow(buttons).setEphemeral(true).queue();
     }
 }

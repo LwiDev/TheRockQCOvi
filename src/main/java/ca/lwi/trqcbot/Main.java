@@ -1,6 +1,7 @@
 package ca.lwi.trqcbot;
 
 import ca.lwi.trqcbot.commands.manager.CommandsManager;
+import ca.lwi.trqcbot.donations.DonationsManager;
 import ca.lwi.trqcbot.handlers.WelcomeMessageHandler;
 import ca.lwi.trqcbot.mongo.MongoConnection;
 import ca.lwi.trqcbot.mongo.MongoCredentials;
@@ -28,6 +29,8 @@ public class Main {
     @Getter
     private static MongoConnection mongoConnection;
     @Getter
+    private static DonationsManager donationsManager;
+    @Getter
     private static RankManager rankManager;
     @Getter
     private static ResourcesManager resourcesManager;
@@ -52,6 +55,7 @@ public class Main {
             System.err.println("Failed to initialize MongoDB: " + e.getMessage());
         }
 
+        donationsManager = new DonationsManager();
         rankManager = new RankManager();
         resourcesManager = new ResourcesManager();
         teamManager = new TeamManager();
@@ -63,6 +67,7 @@ public class Main {
                 .create(dotenv.get("DISC_TOKEN"), GatewayIntent.GUILD_MEMBERS, GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_VOICE_STATES)
                 .setStatus(OnlineStatus.DO_NOT_DISTURB)
                 .setActivity(Activity.playing("Match de Hockey"))
+                .addEventListeners(donationsManager)
                 .addEventListeners(rankManager)
                 .addEventListeners(ticketsHandler)
                 .addEventListeners(new CommandsManager())
