@@ -127,6 +127,77 @@ public class DonationsHandler {
     }
 
     /**
+     * Retire un don à un donateur existant
+     * @param donorName Nom du donateur
+     * @param amount Montant du don à retirer
+     * @return true si le retrait a réussi, false sinon
+     */
+    public static boolean removeDonationFromExistingDonor(String donorName, int amount) {
+        try {
+            // D'abord, vérifier le montant actuel du donateur
+            Document hallOfFame = collection.find(Filters.eq("type", "hall_of_fame")).first();
+            if (hallOfFame == null) {
+                LOGGER.error("Hall of Fame document not found in database");
+                return false;
+            }
+
+            List<Document> donations = hallOfFame.getList("donations", Document.class);
+            Document donor = donations.stream()
+                    .filter(doc -> doc.getString("name").equals(donorName))
+                    .findFirst()
+                    .orElse(null);
+
+            if (donor == null) {
+                LOGGER.warn("Donor {} not found", donorName);
+                return false;
+            }
+
+            int currentTotal = donor.getInteger("total");
+            int newTotal = currentTotal - amount;
+
+            if (newTotal <= 0) {
+                UpdateResult result = collection.updateOne(
+                        Filters.eq("type", "hall_of_fame"),
+                        Updates.combine(
+                                Updates.pull("donations", new Document("name", donorName)),
+                                Updates.inc("total", -currentTotal) // Retirer le montant total du donateur
+                        )
+                );
+
+                if (result.getModifiedCount() > 0) {
+                    LOGGER.info("Removed donor {} as their total became {}", donorName, newTotal);
+                    return true;
+                } else {
+                    LOGGER.warn("Failed to remove donor {}", donorName);
+                    return false;
+                }
+            } else {
+                UpdateResult result = collection.updateOne(
+                        Filters.and(
+                                Filters.eq("type", "hall_of_fame"),
+                                Filters.elemMatch("donations", Filters.eq("name", donorName))
+                        ),
+                        Updates.combine(
+                                Updates.set("donations.$.total", newTotal),
+                                Updates.inc("total", -amount)
+                        )
+                );
+
+                if (result.getModifiedCount() > 0) {
+                    LOGGER.info("Removed {} from donor {}. New total: {}", amount, donorName, newTotal);
+                    return true;
+                } else {
+                    LOGGER.warn("Failed to update donor {}", donorName);
+                    return false;
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error removing donation from donor: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
      * Génère un embed pour une page spécifique
      * @param donorsList Liste des donateurs
      * @param page Numéro de page (0 = podium + top 10, 1+ = autres pages)

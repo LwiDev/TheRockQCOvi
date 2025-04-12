@@ -1,5 +1,6 @@
 package ca.lwi.trqcbot.commands;
 
+import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.internal.interactions.CommandDataImpl;
 import org.jetbrains.annotations.NotNull;
@@ -15,4 +16,6 @@ public abstract class Command extends CommandDataImpl {
     public boolean isGuildCommand(){
         return true;
     }
+
+    public void onAutoComplete(CommandAutoCompleteInteractionEvent e) {}
 }

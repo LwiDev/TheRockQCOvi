@@ -599,7 +599,6 @@ public class ResourcesManager {
         public void onEvent(@NotNull net.dv8tion.jda.api.events.GenericEvent e) {
             if (e instanceof ModalInteractionEvent event) {
                 String modalId = event.getModalId();
-                event.deferReply(true).queue();
                 try {
                     if (modalId.startsWith(MODAL_ADD)) {
                         handleAddModal(event);

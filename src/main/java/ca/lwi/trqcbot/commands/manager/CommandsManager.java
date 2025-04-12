@@ -6,6 +6,7 @@ import ca.lwi.trqcbot.commands.list.ComTR8;
 import ca.lwi.trqcbot.commands.list.ComTicket;
 import net.dv8tion.jda.api.events.guild.GuildJoinEvent;
 import net.dv8tion.jda.api.events.guild.GuildReadyEvent;
+import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
@@ -58,5 +59,11 @@ public class CommandsManager extends ListenerAdapter {
     @Override
     public void onReady(@NotNull ReadyEvent e) {
         e.getJDA().updateCommands().addCommands(this.commands.stream().filter(command -> !command.isGuildCommand()).collect(Collectors.toList())).queue();
+    }
+
+    @Override
+    public void onCommandAutoCompleteInteraction(CommandAutoCompleteInteractionEvent e) {
+        String commandName = e.getName();
+        getCommand(commandName).onAutoComplete(e);
     }
 }

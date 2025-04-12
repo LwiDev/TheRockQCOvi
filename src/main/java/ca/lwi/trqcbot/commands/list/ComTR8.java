@@ -7,6 +7,7 @@ import ca.lwi.trqcbot.handlers.RulesMessageHandler;
 import ca.lwi.trqcbot.handlers.VeteranMessageHandler;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
@@ -15,7 +16,9 @@ import net.dv8tion.jda.api.interactions.commands.build.SubcommandGroupData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class ComTR8 extends Command {
 
@@ -49,9 +52,12 @@ public class ComTR8 extends Command {
         SubcommandData showDonorCmd = new SubcommandData("update", "Afficher le tableau des donateurs");
         showDonorCmd.addOption(OptionType.BOOLEAN, "force_new", "Créer un nouveau message même si un existe déjà", false);
         SubcommandData addToDonorCmd = new SubcommandData("add", "Ajouter un don à un donateur existant");
+        addToDonorCmd.addOption(OptionType.STRING, "donateur", "Nom du donateur", true, true);
         SubcommandData addNewDonorCmd = new SubcommandData("new", "Ajouter un nouveau donateur");
         SubcommandData viewCmd = new SubcommandData("view", "Voir la liste des donateurs de façon interactive");
-        donationsGroup.addSubcommands(showDonorCmd, addToDonorCmd, addNewDonorCmd, viewCmd);
+        SubcommandData removeDonationCmd = new SubcommandData("remove", "Retirer un don à un donateur existant");
+        removeDonationCmd.addOption(OptionType.STRING, "donateur", "Nom du donateur", true, true);
+        donationsGroup.addSubcommands(showDonorCmd, addToDonorCmd, addNewDonorCmd, viewCmd, removeDonationCmd);
 
         // Ajouter les sous-commandes et le groupe à la commande principale
         addSubcommands(welcomeCmd);
@@ -89,8 +95,10 @@ public class ComTR8 extends Command {
                         case "add":
                             Main.getDonationsManager().handleAddToDonor(e);
                             break;
+                        case "remove":
+                            Main.getDonationsManager().handleRemoveDonation(e);
+                            break;
                         case "new":
-                            e.deferReply(true).queue();
                             Main.getDonationsManager().handleAddNewDonor(e);
                             break;
                         case "view":
@@ -147,6 +155,20 @@ public class ComTR8 extends Command {
             } else {
                 e.reply("Une erreur est survenue : " + ex.getMessage()).setEphemeral(true).queue();
             }
+        }
+    }
+
+    @Override
+    public void onAutoComplete(CommandAutoCompleteInteractionEvent e) {
+        if (Objects.equals(e.getSubcommandGroup(), "dons") && (Objects.equals(e.getSubcommandName(), "add") || Objects.equals(e.getSubcommandName(), "remove")) && e.getFocusedOption().getName().equals("donateur")) {
+            String value = e.getFocusedOption().getValue().toLowerCase();
+            List<String> donorNames = DonationsHandler.getDonorNamesList();
+            List<String> filteredOptions = donorNames.stream()
+                    .filter(name -> name.toLowerCase().contains(value))
+                    .sorted(String::compareToIgnoreCase)
+                    .limit(25)
+                    .collect(Collectors.toList());
+            e.replyChoiceStrings(filteredOptions).queue();
         }
     }
 

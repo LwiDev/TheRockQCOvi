@@ -6,7 +6,6 @@ import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEve
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
-import net.dv8tion.jda.api.interactions.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.interactions.components.text.TextInput;
 import net.dv8tion.jda.api.interactions.components.text.TextInputStyle;
 import net.dv8tion.jda.api.interactions.modals.Modal;
@@ -30,7 +29,7 @@ public class DonationsManager extends ListenerAdapter {
     public void handleUpdateDonors(SlashCommandInteractionEvent e) {
         boolean forceNew = e.getOption("force_new") != null && Objects.requireNonNull(e.getOption("force_new")).getAsBoolean();
         DonationsHandler.sendPermanentDonorsMessage(this.channelId, forceNew)
-                .thenRun(() -> e.getHook().editOriginal("Le tableau des donateurs a été mis à jour avec succès!").queue())
+                .thenRun(() -> e.getHook().editOriginal("✅ Le message a été mis à jour.").queue())
                 .exceptionally(error -> {
                     e.getHook().editOriginal("Erreur lors de la mise à jour du tableau des donateurs: " + error.getMessage()).queue();
                     return null;
@@ -38,16 +37,37 @@ public class DonationsManager extends ListenerAdapter {
     }
 
     public void handleAddToDonor(SlashCommandInteractionEvent e) {
+        String donorName = Objects.requireNonNull(e.getOption("donateur")).getAsString();
         List<String> donorNames = DonationsHandler.getDonorNamesList();
-        if (donorNames.isEmpty()) {
-            e.reply("Aucun donateur trouvé dans la base de données.").setEphemeral(true).queue();
+        if (!donorNames.contains(donorName)) {
+            e.reply("Ce donateur n'existe pas dans la base de données.").setEphemeral(true).queue();
             return;
         }
-        StringSelectMenu.Builder menuBuilder = StringSelectMenu.create("donor-select").setPlaceholder("Sélectionner un donateur").setMaxValues(1);
-        donorNames.sort(String::compareToIgnoreCase);
-        List<String> limitedList = donorNames.size() > 25 ? donorNames.subList(0, 25) : donorNames;
-        limitedList.forEach(name -> menuBuilder.addOption(name, name));
-        e.reply("Sélectionne le donateur à qui ajouter un don:").addActionRow(menuBuilder.build()).setEphemeral(true).queue();
+        TextInput amountInput = TextInput.create("amount", "Montant du don", TextInputStyle.SHORT)
+                .setPlaceholder("Entrez le montant (nombre entier)")
+                .setMinLength(1)
+                .setMaxLength(5)
+                .setRequired(true)
+                .build();
+        Modal modal = Modal.create("donation-amount-modal-" + donorName, "Ajouter un don pour " + donorName).addActionRow(amountInput).build();
+        e.replyModal(modal).queue();
+    }
+
+    public void handleRemoveDonation(SlashCommandInteractionEvent e) {
+        String donorName = Objects.requireNonNull(e.getOption("donateur")).getAsString();
+        List<String> donorNames = DonationsHandler.getDonorNamesList();
+        if (!donorNames.contains(donorName)) {
+            e.reply("Ce donateur n'existe pas dans la base de données.").setEphemeral(true).queue();
+            return;
+        }
+        TextInput amountInput = TextInput.create("amount", "Montant à retirer", TextInputStyle.SHORT)
+                .setPlaceholder("Entrez le montant (nombre entier)")
+                .setMinLength(1)
+                .setMaxLength(5)
+                .setRequired(true)
+                .build();
+        Modal modal = Modal.create("donation-remove-modal-" + donorName, "Retirer un don pour " + donorName).addActionRow(amountInput).build();
+        e.replyModal(modal).queue();
     }
 
     @Override
@@ -65,7 +85,7 @@ public class DonationsManager extends ListenerAdapter {
         }
     }
 
-    public void handleAddNewDonor(SlashCommandInteractionEvent event) {
+    public void handleAddNewDonor(SlashCommandInteractionEvent e) {
         TextInput nameInput = TextInput.create("name", "Nom du donateur", TextInputStyle.SHORT)
                 .setPlaceholder("Entrez le nom du donateur")
                 .setMinLength(1)
@@ -85,43 +105,38 @@ public class DonationsManager extends ListenerAdapter {
                 .addActionRow(amountInput)
                 .build();
 
-        event.replyModal(modal).queue();
+        e.replyModal(modal).queue();
     }
 
     @Override
     public void onModalInteraction(ModalInteractionEvent e) {
-        switch (e.getModalId()) {
-            case "donation-amount-modal":
-                handleDonationAmountModal(e);
-                break;
-            case "new-donor-modal":
-                handleNewDonorModal(e);
-                break;
+        if (e.getModalId().equals("new-donor-modal")) {
+            handleNewDonorModal(e);
+        } else if (e.getModalId().startsWith("donation-amount-modal-")) {
+            handleDonationAmountModal(e);
+        } else if (e.getModalId().startsWith("donation-remove-modal-")) {
+            handleDonationRemoveModal(e);
         }
     }
 
     private void handleDonationAmountModal(ModalInteractionEvent e) {
         String amountStr = Objects.requireNonNull(e.getValue("amount")).getAsString();
+        String donorName = "";
+        if (e.getModalId().startsWith("donation-amount-modal-")) {
+            donorName = e.getModalId().substring("donation-amount-modal-".length());
+        } else {
+            e.reply("Erreur: impossible d'identifier le donateur.").setEphemeral(true).queue();
+            return;
+        }
         try {
             int amount = Integer.parseInt(amountStr);
             if (amount <= 0) {
                 e.reply("Le montant doit être supérieur à 0.").setEphemeral(true).queue();
                 return;
             }
-
-            // Récupérer le nom du donateur depuis le titre du modal
-            String[] modalIdParts = e.getModalId().split("-");
-            String donorName = e.getValues().getFirst().getId();
-            if (e.getModalId().startsWith("donation-amount-modal-")) {
-                donorName = e.getModalId().substring("donation-amount-modal-".length());
-            } else {
-                e.reply("Erreur: impossible d'identifier le donateur.").setEphemeral(true).queue();
-                return;
-            }
-
             boolean success = DonationsHandler.addDonationToExistingDonor(donorName, amount);
             if (success) {
-                e.reply("Don de " + amount + "$ ajouté pour " + donorName + " avec succès!").setEphemeral(true).queue();
+                updateAndSendMessage(e, amount, donorName);
             } else {
                 e.reply("Erreur lors de l'ajout du don. Vérifiez que le donateur existe.").setEphemeral(true).queue();
             }
@@ -141,15 +156,54 @@ public class DonationsManager extends ListenerAdapter {
                 return;
             }
             boolean success = DonationsHandler.addNewDonor(donorName, amount);
-
             if (success) {
-                e.reply("Nouveau donateur " + donorName + " ajouté avec un don initial de " + amount + "$.").setEphemeral(true).queue();
+                updateAndSendMessage(e, amount, donorName);
             } else {
                 e.reply("Erreur lors de l'ajout du nouveau donateur.").setEphemeral(true).queue();
             }
         } catch (NumberFormatException ex) {
             e.reply("Le montant doit être un nombre entier valide.").setEphemeral(true).queue();
         }
+    }
+
+    private void handleDonationRemoveModal(ModalInteractionEvent e) {
+        String amountStr = Objects.requireNonNull(e.getValue("amount")).getAsString();
+        String donorName = "";
+        if (e.getModalId().startsWith("donation-remove-modal-")) {
+            donorName = e.getModalId().substring("donation-remove-modal-".length());
+        } else {
+            e.reply("Erreur: impossible d'identifier le donateur.").setEphemeral(true).queue();
+            return;
+        }
+        try {
+            int amount = Integer.parseInt(amountStr);
+            if (amount <= 0) {
+                e.reply("Le montant à retirer doit être supérieur à 0.").setEphemeral(true).queue();
+                return;
+            }
+            boolean success = DonationsHandler.removeDonationFromExistingDonor(donorName, amount);
+            if (success) {
+                e.reply("✅ Le don de **" + amount + "$** a été retiré du total de **" + donorName + "** !").setEphemeral(true).queue();
+                DonationsHandler.sendPermanentDonorsMessage(this.channelId, false)
+                        .exceptionally(error -> {
+                            LOGGER.error("Erreur lors de la mise à jour du tableau des donateurs: {}", error.getMessage());
+                            return null;
+                        });
+            } else {
+                e.reply("Erreur lors du retrait du don. Vérifiez que le donateur existe.").setEphemeral(true).queue();
+            }
+        } catch (NumberFormatException ex) {
+            e.reply("Le montant doit être un nombre entier valide.").setEphemeral(true).queue();
+        }
+    }
+
+    private void updateAndSendMessage(ModalInteractionEvent e, int amount, String donorName) {
+        e.reply("✅ Le don de **" + amount + "$** de **" + donorName + "** a été ajouté !").setEphemeral(true).queue();
+        DonationsHandler.sendPermanentDonorsMessage(this.channelId, false)
+                .exceptionally(error -> {
+                    LOGGER.error("Erreur lors de la mise à jour du tableau des donateurs: {}", error.getMessage());
+                    return null;
+                });
     }
 
     @Override
