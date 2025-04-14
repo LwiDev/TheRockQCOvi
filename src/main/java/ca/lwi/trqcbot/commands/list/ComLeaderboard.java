@@ -4,6 +4,7 @@ import ca.lwi.trqcbot.Main;
 import ca.lwi.trqcbot.commands.Command;
 import ca.lwi.trqcbot.reputation.ReputationManager;
 import ca.lwi.trqcbot.utils.FontUtils;
+import ca.lwi.trqcbot.utils.ImageUtils;
 import io.github.cdimascio.dotenv.Dotenv;
 import lombok.Getter;
 import lombok.Setter;
@@ -17,14 +18,9 @@ import org.bson.Document;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
-import java.awt.geom.Ellipse2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URLConnection;
 import java.util.*;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -219,36 +215,47 @@ public class ComLeaderboard extends Command {
             // Équipe
             try {
                 if (user.getLogoPath() != null && !user.getLogoPath().isEmpty()) {
-                    BufferedImage logo = loadImage(user.getLogoPath());
-                    int logoSize = 40;
+                    // Charger l'image (SVG ou autre)
+                    BufferedImage logo = ImageUtils.loadImage(user.getLogoPath(), 80);
+
+                    // Définir la taille souhaitée pour le logo
+                    int logoHeight = 40;
+                    // Calculer la largeur en préservant le ratio d'aspect
+                    int logoWidth = (int) (logoHeight * ((double) logo.getWidth() / logo.getHeight()));
+
+                    // Position du logo
                     int logoX = 350;
                     int logoY = rowY + 5;
 
-                    // Créer un logo circulaire
-                    BufferedImage circularLogo = new BufferedImage(logoSize, logoSize, BufferedImage.TYPE_INT_ARGB);
-                    Graphics2D logoG2d = circularLogo.createGraphics();
+                    // Redimensionner avec haute qualité
+                    BufferedImage resizedLogo = new BufferedImage(logoWidth, logoHeight, BufferedImage.TYPE_INT_ARGB);
+                    Graphics2D logoG2d = resizedLogo.createGraphics();
+
+                    // Paramètres de rendu pour une qualité optimale
                     logoG2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                     logoG2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
                     logoG2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                    logoG2d.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
 
-                    Ellipse2D.Float circle = new Ellipse2D.Float(0, 0, logoSize, logoSize);
-                    logoG2d.setClip(circle);
-                    logoG2d.drawImage(logo, 0, 0, logoSize, logoSize, null);
+                    // Dessiner l'image
+                    logoG2d.drawImage(logo, 0, 0, logoWidth, logoHeight, null);
                     logoG2d.dispose();
 
-                    g2d.drawImage(circularLogo, logoX, logoY, null);
+                    // Afficher le logo sur l'image principale du leaderboard
+                    g2d.drawImage(resizedLogo, logoX, logoY, null);
                 } else {
-                    // Si pas de logo, afficher le nom de l'équipe comme avant
+                    // Si pas de logo, afficher le nom de l'équipe
                     g2d.setFont(new Font("Arial", Font.BOLD, 18));
                     g2d.setColor(new Color(180, 180, 180));
-                    g2d.drawString(user.getTeamName(), 400, rowY + 32);
+                    g2d.drawString(user.getTeamName(), 350, rowY + 32);
                 }
             } catch (Exception e) {
                 // En cas d'erreur, afficher le nom de l'équipe
                 g2d.setFont(new Font("Arial", Font.BOLD, 18));
                 g2d.setColor(new Color(180, 180, 180));
-                g2d.drawString(user.getTeamName(), 400, rowY + 32);
+                g2d.drawString(user.getTeamName(), 350, rowY + 32);
                 System.err.println("Erreur lors du chargement du logo: " + e.getMessage());
+                e.printStackTrace(); // Pour un débogage plus complet
             }
 
             // Niveau de réputation
@@ -267,21 +274,6 @@ public class ComLeaderboard extends Command {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         ImageIO.write(image, "png", outputStream);
         return outputStream;
-    }
-
-    private BufferedImage loadImage(String imagePath) throws IOException, URISyntaxException {
-        if (imagePath == null || imagePath.isEmpty()) throw new IOException("Le chemin de l'image est vide ou null");
-        BufferedImage image;
-        if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
-            URI uri = new URI(imagePath);
-            URLConnection connection = uri.toURL().openConnection();
-            connection.setRequestProperty("User-Agent", "bot emily-bot");
-            image = ImageIO.read(connection.getInputStream());
-        } else {
-            image = ImageIO.read(new File(imagePath));
-        }
-        if (image == null) throw new IOException("Impossible de charger l'image: " + imagePath);
-        return image;
     }
 
     // Classe pour stocker les informations de réputation d'un utilisateur

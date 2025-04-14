@@ -4,6 +4,7 @@ import ca.lwi.trqcbot.Main;
 import ca.lwi.trqcbot.commands.Command;
 import ca.lwi.trqcbot.reputation.ReputationManager;
 import ca.lwi.trqcbot.utils.FontUtils;
+import ca.lwi.trqcbot.utils.ImageUtils;
 import io.github.cdimascio.dotenv.Dotenv;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.User;
@@ -19,7 +20,6 @@ import java.awt.*;
 import java.awt.geom.Ellipse2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -138,9 +138,9 @@ public class ComRank extends Command {
         // Draw logo in background if available
         try {
             if (logoPath != null && !logoPath.isEmpty()) {
-                BufferedImage logo = loadImage(logoPath);
+                BufferedImage logo = ImageUtils.loadImage(logoPath, 500);
                 int infoBarY = 180;
-                int logoSize = Math.min(width, height) - 100;
+                int logoSize = height - 100;
                 int logoX = (width - logoSize) / 2;
                 int logoY = infoBarY + 40;
                 float alpha = 0.15f;
@@ -179,7 +179,7 @@ public class ComRank extends Command {
         int logoY = 50;
         try {
             if (logoPath != null && !logoPath.isEmpty()) {
-                BufferedImage logo = loadImage(logoPath);
+                BufferedImage logo = ImageUtils.loadImage(logoPath, 80);
                 BufferedImage circularLogo = new BufferedImage(logoSize, logoSize, BufferedImage.TYPE_INT_ARGB);
                 Graphics2D logoG2d = circularLogo.createGraphics();
                 logoG2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -192,6 +192,7 @@ public class ComRank extends Command {
             System.err.println("Erreur lors du chargement du logo:");
             e.printStackTrace();
         }
+
 
         // Configurer les polices pour pouvoir calculer les dimensions
         Font usernameFont = FontUtils.calculateOptimalNameFont(g2d, username, 250, 60);
@@ -356,21 +357,6 @@ public class ComRank extends Command {
             profileImg = ImageIO.read(Objects.requireNonNull(ComRank.class.getClassLoader().getResource("default_profile.jpg")));
         }
         return profileImg;
-    }
-
-    private BufferedImage loadImage(String imagePath) throws IOException, URISyntaxException {
-        if (imagePath == null || imagePath.isEmpty()) throw new IOException("Le chemin de l'image est vide ou null");
-        BufferedImage image;
-        if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
-            URI uri = new URI(imagePath);
-            URLConnection connection = uri.toURL().openConnection();
-            connection.setRequestProperty("User-Agent", "bot emily-bot");
-            image = ImageIO.read(connection.getInputStream());
-        } else {
-            image = ImageIO.read(new File(imagePath));
-        }
-        if (image == null) throw new IOException("Impossible de charger l'image: " + imagePath);
-        return image;
     }
 
     private Color getDarkerColor(Color original) {
