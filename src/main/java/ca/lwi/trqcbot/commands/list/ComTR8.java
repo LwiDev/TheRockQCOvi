@@ -79,70 +79,66 @@ public class ComTR8 extends Command {
             e.reply("Veuillez spécifier une sous-commande.").setEphemeral(true).queue();
             return;
         }
-        
-        if (subcommandGroup == null) {
-            e.reply("Veuillez spécifier une sous-commande.").setEphemeral(true).queue();
-            return;
-        }
 
         try {
-            switch (subcommandGroup) {
-                case "dons" -> {
-                    switch (subcommandName.toLowerCase()) {
-                        case "update":
-                            e.deferReply(true).queue();
-                            Main.getDonationsManager().handleUpdateDonors(e);
-                            break;
-                        case "add":
-                            Main.getDonationsManager().handleAddDonation(e);
-                            break;
-                        case "remove":
-                            Main.getDonationsManager().handleRemoveDonation(e);
-                            break;
-                        case "view":
-                            handleViewDonors(e);
-                            break;
-                        default:
-                            e.reply("Sous-commande inconnue dans le groupe donations.").setEphemeral(true).queue();
-                    }
+            if (subcommandGroup == null) {
+                if (subcommandName.equalsIgnoreCase("welcome")) {
+                    e.deferReply(true).queue();
+                    handleWelcomeMessage(e);
+                } else {
+                    e.reply("Sous-commande inconnue.").setEphemeral(true).queue();
                 }
-                case "resources" -> {
-                    switch (subcommandName.toLowerCase()) {
-                        case "update":
-                            e.deferReply(true).queue();
-                            Main.getResourcesManager().handleUpdate(e);
-                            break;
-                        case "manage":
-                            Main.getResourcesManager().handleManage(e);
-                            break;
-                        case "view":
-                            e.deferReply(true).queue();
-                            Main.getResourcesManager().handleViewConfig(e);
-                            break;
-                        default:
-                            e.reply("Sous-commande inconnue dans le groupe resources.").setEphemeral(true).queue();
+            } else {
+                switch (subcommandGroup) {
+                    case "dons" -> {
+                        switch (subcommandName.toLowerCase()) {
+                            case "update":
+                                e.deferReply(true).queue();
+                                Main.getDonationsManager().handleUpdateDonors(e);
+                                break;
+                            case "add":
+                                Main.getDonationsManager().handleAddDonation(e);
+                                break;
+                            case "remove":
+                                Main.getDonationsManager().handleRemoveDonation(e);
+                                break;
+                            case "view":
+                                handleViewDonors(e);
+                                break;
+                            default:
+                                e.reply("Sous-commande inconnue dans le groupe donations.").setEphemeral(true).queue();
+                        }
                     }
-                }
-                case "messages" -> {
-                    switch (subcommandName.toLowerCase()) {
-                        case "rules":
-                            e.deferReply(true).queue();
-                            handleUpdateRules(e);
-                            break;
-                        case "veteran":
-                            e.deferReply(true).queue();
-                            handleUpdateVeteran(e);
-                            break;
-                        default:
-                            e.reply("Sous-commande inconnue dans le groupe vétéran.").setEphemeral(true).queue();
+                    case "resources" -> {
+                        switch (subcommandName.toLowerCase()) {
+                            case "update":
+                                e.deferReply(true).queue();
+                                Main.getResourcesManager().handleUpdate(e);
+                                break;
+                            case "manage":
+                                Main.getResourcesManager().handleManage(e);
+                                break;
+                            case "view":
+                                e.deferReply(true).queue();
+                                Main.getResourcesManager().handleViewConfig(e);
+                                break;
+                            default:
+                                e.reply("Sous-commande inconnue dans le groupe resources.").setEphemeral(true).queue();
+                        }
                     }
-                }
-                default -> {
-                    if (subcommandName.equalsIgnoreCase("welcome")) {
-                        e.deferReply(true).queue();
-                        handleWelcomeMessage(e);
-                    } else {
-                        e.reply("Sous-commande inconnue.").setEphemeral(true).queue();
+                    case "messages" -> {
+                        switch (subcommandName.toLowerCase()) {
+                            case "rules":
+                                e.deferReply(true).queue();
+                                handleUpdateRules(e);
+                                break;
+                            case "veteran":
+                                e.deferReply(true).queue();
+                                handleUpdateVeteran(e);
+                                break;
+                            default:
+                                e.reply("Sous-commande inconnue dans le groupe vétéran.").setEphemeral(true).queue();
+                        }
                     }
                 }
             }

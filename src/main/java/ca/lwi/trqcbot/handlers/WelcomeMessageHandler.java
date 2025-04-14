@@ -81,7 +81,7 @@ public class WelcomeMessageHandler {
                     isTrade ? originalTeam : ""
             );
 
-            int memberCount = guild.getMemberCount();
+            int memberCount = guild.getMemberCount() - 1;
             channel.sendMessage("Les " + teamName + " sont fiers de choisir **" + member.getAsMention() + "** comme " + memberCount + "e choix au repêchage !")
                     .addFiles(FileUpload.fromData(imageBytes, member.getEffectiveName() + "_draft.png"))
                     .queue();
@@ -104,10 +104,7 @@ public class WelcomeMessageHandler {
         }
 
         try {
-            Document userData = Main.getMongoConnection().getDatabase().getCollection("users")
-                    .find(new Document("userId", member.getId()))
-                    .first();
-
+            Document userData = Main.getMongoConnection().getDatabase().getCollection("users").find(new Document("userId", member.getId())).first();
             if (userData == null) {
                 channel.sendMessage("Bienvenue à " + member.getAsMention() + " ! (Aucune donnée d'équipe trouvée)").queue();
                 return;
@@ -126,15 +123,12 @@ public class WelcomeMessageHandler {
                 return;
             }
 
+            String teamDet = teamDoc.getString("det") != null ? teamDoc.getString("det") : "Les";
             String teamLogoUrl = teamDoc.getString("logo");
             String teamColorHex = teamDoc.getString("color");
 
             Integer roundPick = userData.getInteger("roundPick");
-            if (roundPick == null) {
-                roundPick = guild.getMemberCount();
-            }
-
-            // Utiliser les données existantes pour générer l'image
+            if (roundPick == null) roundPick = guild.getMemberCount() - 1;
             byte[] imageBytes = generateDraftImage(
                     teamName,
                     teamLogoUrl,
@@ -144,7 +138,13 @@ public class WelcomeMessageHandler {
                     roundPick
             );
 
-            channel.sendMessage("Les " + teamName + " sont fiers de choisir **" + member.getAsMention() + "** comme " + roundPick + "e choix au repêchage !")
+            String verb = "sont";
+            boolean plural = true;
+            if (teamDet.equals("Le") || teamDet.equalsIgnoreCase("L'")) {
+                verb = "est";
+                plural = false;
+            }
+            channel.sendMessage(teamDet + " " + teamName + " " + verb + " fier" + (plural ? "s" : "") + " de choisir **" + member.getAsMention() + "** comme " + roundPick + "e choix au repêchage !")
                     .addFiles(FileUpload.fromData(imageBytes, member.getEffectiveName() + "_draft.png"))
                     .queue();
 
@@ -260,7 +260,7 @@ public class WelcomeMessageHandler {
     }
 
     private byte[] generateDraftImage(String teamName, String logoUrl, String colorHex, Member member, String originalTeam) throws IOException, URISyntaxException {
-        return generateDraftImage(teamName, logoUrl, colorHex, member, originalTeam, member.getGuild().getMemberCount());
+        return generateDraftImage(teamName, logoUrl, colorHex, member, originalTeam, member.getGuild().getMemberCount() - 1);
     }
 
     private byte[] generateDraftImage(String teamName, String logoUrl, String colorHex, Member member, String originalTeam, int roundPick) throws IOException, URISyntaxException {

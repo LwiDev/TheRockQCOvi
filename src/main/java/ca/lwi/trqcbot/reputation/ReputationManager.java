@@ -2,9 +2,15 @@ package ca.lwi.trqcbot.reputation;
 
 import org.bson.Document;
 
+import java.awt.*;
+
 public class ReputationManager {
 
-    public static int calculateReputation(Document userData, int messagesCount) {
+    public static int calculateReputation(Document userData) {
+        Document reputation = (Document) userData.get("reputation");
+        if (reputation == null) return 0;
+
+        int messagesCount = reputation.getInteger("messagesCount", 0);
         int reputationScore = 0;
 
         // Bonus de vétéran
@@ -12,21 +18,21 @@ public class ReputationManager {
         if (isVeteran) reputationScore += 15;
 
         // Pénalité d'inactivité
-        reputationScore = getInactiveScore(userData, reputationScore);
+        reputationScore = getInactiveScore(reputation, reputationScore);
 
         // Bonus d'interactions
-        int reputationActionBonus = calculateReputationActionBonus(userData);
+        int reputationActionBonus = calculateReputationActionBonus(reputation);
         reputationScore += reputationActionBonus;
 
         // Bonus de messages quotidiens
-        int dailyMessages = userData.getInteger("dailyMessagesCount", 0);
-        int avgDailyMessages = userData.getInteger("avgDailyMessages", dailyMessages);
+        int dailyMessages = reputation.getInteger("dailyMessagesCount", 0);
+        int avgDailyMessages = reputation.getInteger("avgDailyMessages", dailyMessages);
         int messageWeightedAvg = calculateWeightedAverage(dailyMessages, avgDailyMessages);
 
         reputationScore = applyDailyActivityFactor(reputationScore, messageWeightedAvg, messagesCount);
 
         // Bonus d'activité vocale
-        int voiceActivityBonus = calculateVoiceActivityBonus(userData);
+        int voiceActivityBonus = calculateVoiceActivityBonus(reputation);
         reputationScore += voiceActivityBonus;
 
         // Facteur basé sur le nombre total de messages - progression graduelle
@@ -68,10 +74,10 @@ public class ReputationManager {
         return reputationScore;
     }
 
-    private static int calculateReputationActionBonus(Document userData) {
+    private static int calculateReputationActionBonus(Document reputation) {
         int bonus = 0;
-        int responses = userData.getInteger("responsesCount", 0);
-        int tags = userData.getInteger("tagsCount", 0);
+        int responses = reputation.getInteger("responsesCount", 0);
+        int tags = reputation.getInteger("tagsCount", 0);
 
         // Points pour les réponses, avec plafonnement progressif
         if (responses <= 10) {
@@ -94,10 +100,10 @@ public class ReputationManager {
         return bonus;
     }
 
-    private static int calculateVoiceActivityBonus(Document userData) {
-        int totalVoiceMinutes = userData.getInteger("totalVoiceMinutes", 0);
-        int dailyVoiceMinutes = userData.getInteger("dailyVoiceMinutes", 0);
-        int voiceDaysActive = userData.getInteger("voiceDaysActive", 0);
+    private static int calculateVoiceActivityBonus(Document reputation) {
+        int totalVoiceMinutes = reputation.getInteger("totalVoiceMinutes", 0);
+        int dailyVoiceMinutes = reputation.getInteger("dailyVoiceMinutes", 0);
+        int voiceDaysActive = reputation.getInteger("voiceDaysActive", 0);
 
         int voiceBonus = 0;
 
@@ -134,8 +140,23 @@ public class ReputationManager {
         return Math.min(20, voiceBonus);
     }
 
-    private static int getInactiveScore(Document userData, int reputationScore) {
-        long lastActiveTimestamp = userData.containsKey("lastActive") ? userData.getLong("lastActive") : userData.getLong("joinDate");
+    private static int getInactiveScore(Document reputation, int reputationScore) {
+        // Vérifier si reputation est null
+        if (reputation == null) {
+            return reputationScore;
+        }
+
+        // Récupérer lastActive, avec une valeur par défaut si c'est null
+        Long lastActiveObj = reputation.get("lastActive", Long.class);
+        Long joinDateObj = reputation.get("joinDate", Long.class);
+
+        // Si les deux sont null, on ne peut pas calculer l'inactivité
+        if (lastActiveObj == null && joinDateObj == null) {
+            return reputationScore;
+        }
+
+        // Utiliser lastActive s'il existe, sinon utiliser joinDate
+        long lastActiveTimestamp = lastActiveObj != null ? lastActiveObj : joinDateObj;
         long daysInactive = (System.currentTimeMillis() - lastActiveTimestamp) / (1000 * 60 * 60 * 24);
 
         if (daysInactive > 30) {
@@ -162,5 +183,15 @@ public class ReputationManager {
         } else {
             return "💨 Invisible";
         }
+    }
+
+    public static Color getRepurationRankColor(String rank) {
+        return switch (rank) {
+            case "🌟 Légende" -> new Color(255, 215, 0); // Or
+            case "🔥 Respecté" -> new Color(220, 100, 50); // Orange-rouge
+            case "🗣️ Connu" -> new Color(100, 180, 220); // Bleu clair
+            case "👋 Présent" -> new Color(100, 220, 100); // Vert
+            default -> new Color(150, 150, 150); // Gris
+        };
     }
 }

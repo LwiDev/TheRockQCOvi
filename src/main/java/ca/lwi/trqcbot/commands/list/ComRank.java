@@ -9,6 +9,8 @@ import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
+import net.dv8tion.jda.api.interactions.commands.OptionMapping;
+import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.utils.FileUpload;
 import org.bson.Document;
 
@@ -29,11 +31,12 @@ import java.util.Objects;
 
 public class ComRank extends Command {
 
-    private String channelId;
+    private final String channelId;
 
     public ComRank() {
         super("rank", "Affichez votre rang actuel sur le serveur");
         setDefaultPermissions(DefaultMemberPermissions.ENABLED);
+        addOption(OptionType.USER, "membre", "Utilisateur à rechercher", false);
 
         Dotenv dotenv = Dotenv.load();
         this.channelId = dotenv.get("CHANNEL_QG_DES_STATS_ID");
@@ -49,20 +52,29 @@ public class ComRank extends Command {
 
         e.deferReply().queue();
 
-        String userId = e.getUser().getId();
+        // Obtenir l'utilisateur cible (soit l'utilisateur mentionné, soit celui qui a exécuté la commande)
+        OptionMapping memberOption = e.getOption("membre");
+        User targetUser = memberOption != null ? memberOption.getAsUser() : e.getUser();
+        Member targetMember = memberOption != null ? memberOption.getAsMember() : e.getMember();
+        if (targetMember == null) {
+            e.getHook().sendMessage("Impossible de trouver ce membre sur le serveur.").setEphemeral(true).queue();
+            return;
+        }
+
+        String userId = targetUser.getId();
         Document userData = Main.getRankManager().getUserData(userId);
         if (userData != null) {
             Member member = e.getMember();
             if (member == null) return;
-            String username = member.getEffectiveName();
+            String username = targetMember.getEffectiveName();
             String teamName = userData.getString("teamName");
             int roundPick = userData.getInteger("roundPick", 0);
             String rank = userData.getString("currentRank");
             long joinTimestamp = userData.getLong("joinDate");
-            int messagesCount = userData.getInteger("messagesCount", 0);
 
-            // Calcul de la réputation
-            int reputationScore = userData.getInteger("reputationScore", 0);
+            Document reputation = (Document) userData.get("reputation");
+            if (reputation == null) reputation = new Document();
+            int reputationScore = reputation.getInteger("reputationScore", 0);
             String reputationRank = ReputationManager.getReputationRank(reputationScore);
 
             // Formatage de la date
@@ -91,19 +103,19 @@ public class ComRank extends Command {
             }
 
             try {
-                BufferedImage avatar = getUserAvatar(e.getUser());
-                ByteArrayOutputStream outputStream = generateModernPlayerCard(username, teamName, formattedDate, ordinal, rank, teamColor, logoPath, avatar, messagesCount, reputationRank);
+                BufferedImage avatar = getUserAvatar(targetUser);
+                ByteArrayOutputStream outputStream = generateModernPlayerCard(username, teamName, formattedDate, ordinal, rank, teamColor, logoPath, avatar, reputationScore, reputationRank);
                 e.getHook().sendFiles(FileUpload.fromData(outputStream.toByteArray(), username + "_rank.png")).queue();
             } catch (Exception ex) {
-                e.getHook().sendMessage("Erreur lors de la génération de la carte de rang : " + ex.getMessage()).queue();
-                ex.printStackTrace();
+                e.getHook().sendMessage("Erreur lors de la génération de la carte de rang : " + ex.getMessage()).setEphemeral(true).queue();
             }
         } else {
-            e.getHook().sendMessage("Impossible de trouver votre profil.").queue();
+            String notFoundMessage = memberOption != null ? "Impossible de trouver le profil de " + targetMember.getEffectiveName() + "." : "Impossible de trouver votre profil.";
+            e.getHook().sendMessage(notFoundMessage).setEphemeral(true).queue();
         }
     }
 
-    private ByteArrayOutputStream generateModernPlayerCard(String username, String teamName, String draftDate, String roundPick, String rank, Color teamColor, String logoPath, BufferedImage avatar, int messagesCount, String reputationRank) throws IOException {
+    private ByteArrayOutputStream generateModernPlayerCard(String username, String teamName, String draftDate, String roundPick, String rank, Color teamColor, String logoPath, BufferedImage avatar, int reputationScore, String reputationRank) throws IOException {
         int width = 800;
         int height = 500;
 
@@ -151,7 +163,7 @@ public class ComRank extends Command {
         drawInfoBar(g2d, width, infoBarY, teamName, roundPick);
 
         // Stats section using the provided team color
-        drawInfosSection(g2d, width, infoBarY + 70, messagesCount, draftDate, teamColor, reputationRank);
+        drawInfosSection(g2d, width, infoBarY + 70, reputationScore, draftDate, teamColor, reputationRank);
 
         g2d.dispose();
 
@@ -182,7 +194,7 @@ public class ComRank extends Command {
         }
 
         // Configurer les polices pour pouvoir calculer les dimensions
-        Font usernameFont = FontUtils.calculateOptimalNameFont(g2d, username, 400, 60);
+        Font usernameFont = FontUtils.calculateOptimalNameFont(g2d, username, 250, 60);
         Font rankFont = new Font("Arial", Font.BOLD, 24);
         FontMetrics usernameFontMetrics = g2d.getFontMetrics(usernameFont);
         FontMetrics rankFontMetrics = g2d.getFontMetrics(rankFont);
@@ -243,7 +255,7 @@ public class ComRank extends Command {
         g2d.drawString(infoText, textX, y + 27);
     }
 
-    private void drawInfosSection(Graphics2D g2d, int width, int startY, int messagesCount, String draftDate, Color teamColor, String reputationRank) {
+    private void drawInfosSection(Graphics2D g2d, int width, int startY, int reputationScore, String draftDate, Color teamColor, String reputationRank) {
         g2d.setColor(new Color(40, 50, 60, 180));
 
         // Barre d'accent latérale
@@ -256,11 +268,11 @@ public class ComRank extends Command {
         g2d.drawString("INFORMATIONS", 60, startY + 30);
 
         // Stats list with more spacing
-        String[] statNames = {"Messages", "Repêché le", "Réputation"};
+        String[] statNames = {"Repêché le", "Niveau", "Score"};
         String[] statValues = {
-                String.valueOf(messagesCount),
                 String.valueOf(draftDate),
-                String.valueOf(reputationRank)
+                String.valueOf(reputationRank),
+                String.valueOf(reputationScore)
         };
 
         g2d.setFont(new Font("Segoe UI Emoji", Font.BOLD, 28));

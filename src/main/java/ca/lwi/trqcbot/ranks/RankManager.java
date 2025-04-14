@@ -3,6 +3,7 @@ package ca.lwi.trqcbot.ranks;
 import ca.lwi.trqcbot.Main;
 import ca.lwi.trqcbot.reputation.ReputationManager;
 import ca.lwi.trqcbot.reputation.VoiceActivityTracker;
+import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
 import io.github.cdimascio.dotenv.Dotenv;
 import net.dv8tion.jda.api.JDA;
@@ -79,15 +80,30 @@ public class RankManager extends ListenerAdapter {
         Document existingUser = userCollection.find(new Document("userId", member.getId())).first();
         if (existingUser != null) return;
 
+        Document reputationDoc = new Document("reputationScore", 0)
+                .append("messagesCount", 0)
+                .append("dailyMessagesCount", 0)
+                .append("avgDailyMessages", 0)
+                .append("activeDaysCount", 0)
+                .append("responsesCount", 0)
+                .append("tagsCount", 0)
+                .append("totalVoiceMinutes", 0)
+                .append("dailyVoiceMinutes", 0)
+                .append("voiceDaysActive", 0);
+
         Document userDoc = new Document("userId", member.getId())
                 .append("username", member.getUser().getName())
                 .append("joinDate", new Date(System.currentTimeMillis()))
-                .append("messagesCount", 0)
-                .append("currentRank", "Recrue");
+                .append("currentRank", "Recrue")
+                .append("reputation", reputationDoc);
         userCollection.insertOne(userDoc);
-        
+
         Role recrueRole = guild.getRoleById(recrueRoleId);
-        if (recrueRole != null) guild.addRoleToMember(UserSnowflake.fromId(member.getId()), recrueRole).queue();
+        if (recrueRole != null) {
+            guild.addRoleToMember(UserSnowflake.fromId(member.getId()), recrueRole).queue();
+        } else {
+            System.out.println("recrueRole is null");
+        }
 
         Main.getWelcomeMessageHandler().createMessage(e.getGuild(), e.getMember());
     }
@@ -120,9 +136,13 @@ public class RankManager extends ListenerAdapter {
         if (user != null) {
             Message message = event.getMessage();
             String currentRank = user.getString("currentRank");
-            int messagesCount = user.getInteger("messagesCount", 0);
-            int responsesCount = user.getInteger("responsesCount", 0);
-            int tagsCount = user.getInteger("tagsCount", 0);
+
+            Document reputation = (Document) user.get("reputation");
+            if (reputation == null) reputation = new Document();
+
+            int messagesCount = reputation.getInteger("messagesCount", 0);
+            int responsesCount = reputation.getInteger("responsesCount", 0);
+            int tagsCount = reputation.getInteger("tagsCount", 0);
 
             List<User> mentionedUsers = message.getMentions().getUsers();
             if (mentionedUsers.stream().map(ISnowflake::getId).anyMatch(id -> !id.equals(userId) && id.equals(user.getString("userId")))) tagsCount++;
@@ -133,10 +153,10 @@ public class RankManager extends ListenerAdapter {
             // Gestion des messages quotidiens
             long currentTimestamp = System.currentTimeMillis();
             long dayStart = currentTimestamp - (currentTimestamp % (1000 * 60 * 60 * 24));
-            long lastMessageDay = user.getLong("lastMessageDay") != null ? user.getLong("lastMessageDay") : 0;
-            int dailyMessagesCount = user.getInteger("dailyMessagesCount", 0);
-            int avgDailyMessages = user.getInteger("avgDailyMessages", 0);
-            int activeDaysCount = user.getInteger("activeDaysCount", 0);
+            long lastMessageDay = reputation.getLong("lastMessageDay") != null ? reputation.getLong("lastMessageDay") : 0;
+            int dailyMessagesCount = reputation.getInteger("dailyMessagesCount", 0);
+            int avgDailyMessages = reputation.getInteger("avgDailyMessages", 0);
+            int activeDaysCount = reputation.getInteger("activeDaysCount", 0);
 
             // Nouveau jour = mise à jour de la moyenne et réinitialisation du compteur
             if (lastMessageDay < dayStart && lastMessageDay > 0) {
@@ -154,20 +174,25 @@ public class RankManager extends ListenerAdapter {
                 dailyMessagesCount++;
             }
 
-            int reputationScore = ReputationManager.calculateReputation(user, messagesCount);
+            // Mettre à jour le sous-document reputation
+            Document updatedReputation = new Document("messagesCount", messagesCount + 5)
+                    .append("tagsCount", tagsCount)
+                    .append("responsesCount", responsesCount)
+                    .append("lastMessageDay", dayStart)
+                    .append("dailyMessagesCount", dailyMessagesCount)
+                    .append("avgDailyMessages", avgDailyMessages)
+                    .append("activeDaysCount", activeDaysCount)
+                    .append("lastActive", currentTimestamp);
+
+            // Calculer et ajouter le score de réputation
+            int reputationScore = ReputationManager.calculateReputation(user);
+            updatedReputation.append("reputationScore", reputationScore);
+
             userCollection.updateOne(
                     new Document("userId", userId),
-                    new Document("$set", new Document("messagesCount", messagesCount + 5)
-                            .append("reputationScore", reputationScore)
-                            .append("tagsCount", tagsCount)
-                            .append("responsesCount", responsesCount)
-                            .append("lastMessageDay", dayStart)
-                            .append("dailyMessagesCount", dailyMessagesCount)
-                            .append("avgDailyMessages", avgDailyMessages)
-                            .append("activeDaysCount", activeDaysCount)
-                            .append("lastActive", currentTimestamp)
-                    )
+                    new Document("$set", new Document("reputation", updatedReputation))
             );
+
             if (messagesCount >= activityThreshold && currentRank.equals("Recrue")) promoteToJoueur(userId);
         }
     }
@@ -176,13 +201,16 @@ public class RankManager extends ListenerAdapter {
         Document user = userCollection.find(new Document("userId", userId)).first();
         if (user == null) return;
 
+        Document reputation = (Document) user.get("reputation");
+        if (reputation == null) reputation = new Document();
+
         // Récupérer les statistiques vocales existantes ou initialiser
-        int totalVoiceMinutes = user.getInteger("totalVoiceMinutes", 0) + minutesSpent;
-        int dailyVoiceMinutes = user.getInteger("dailyVoiceMinutes", 0) + minutesSpent;
-        int voiceDaysActive = user.getInteger("voiceDaysActive", 0);
+        int totalVoiceMinutes = reputation.getInteger("totalVoiceMinutes", 0) + minutesSpent;
+        int dailyVoiceMinutes = reputation.getInteger("dailyVoiceMinutes", 0) + minutesSpent;
+        int voiceDaysActive = reputation.getInteger("voiceDaysActive", 0);
 
         long dayStart = System.currentTimeMillis() - (System.currentTimeMillis() % (1000 * 60 * 60 * 24));
-        long lastVoiceDay = user.getLong("lastVoiceDay") != null ? user.getLong("lastVoiceDay") : 0;
+        long lastVoiceDay = reputation.getLong("lastVoiceDay") != null ? reputation.getLong("lastVoiceDay") : 0;
 
         // Nouveau jour d'activité vocale
         if (lastVoiceDay < dayStart) {
@@ -191,23 +219,20 @@ public class RankManager extends ListenerAdapter {
         }
 
         // Mise à jour des statistiques vocales
-        userCollection.updateOne(
-                new Document("userId", userId),
-                new Document("$set", new Document("totalVoiceMinutes", totalVoiceMinutes)
-                        .append("dailyVoiceMinutes", dailyVoiceMinutes)
-                        .append("voiceDaysActive", voiceDaysActive)
-                        .append("lastVoiceDay", dayStart)
-                        .append("lastActive", System.currentTimeMillis())
-                )
-        );
+        Document updatedReputation = new Document(reputation);
+        updatedReputation.put("totalVoiceMinutes", totalVoiceMinutes);
+        updatedReputation.put("dailyVoiceMinutes", dailyVoiceMinutes);
+        updatedReputation.put("voiceDaysActive", voiceDaysActive);
+        updatedReputation.put("lastVoiceDay", dayStart);
+        updatedReputation.put("lastActive", System.currentTimeMillis());
 
         // Recalculer la réputation
-        int messagesCount = user.getInteger("messagesCount", 0);
-        int reputationScore = ReputationManager.calculateReputation(user, messagesCount);
+        int reputationScore = ReputationManager.calculateReputation(user);
+        updatedReputation.put("reputationScore", reputationScore);
 
         userCollection.updateOne(
                 new Document("userId", userId),
-                new Document("$set", new Document("reputationScore", reputationScore))
+                new Document("$set", new Document("reputation", updatedReputation))
         );
     }
     
@@ -317,7 +342,33 @@ public class RankManager extends ListenerAdapter {
         }
     }
 
+    /**
+     * Récupère les données d'un utilisateur
+     * @return Une liste contenant le document de l'utilisateur
+     */
     public Document getUserData(String userId) {
         return userCollection.find(new Document("userId", userId)).first();
+    }
+
+    /**
+     * Récupère les données de tous les utilisateurs avec optimisation
+     * @return Une liste contenant les documents des utilisateurs
+     */
+    public List<Document> getAllUsersData() {
+        return getAllUsersData(0);
+    }
+
+    /**
+     * Récupère les données de tous les utilisateurs avec optimisation
+     * @param limit Nombre maximum d'utilisateurs à récupérer (0 = tous)
+     * @return Une liste contenant les documents des utilisateurs
+     */
+    public List<Document> getAllUsersData(int limit) {
+        List<Document> users = new ArrayList<>();
+        Document projection = new Document("_id", 1).append("userId", 1).append("teamName", 1).append("currentRank", 1).append("reputation", 1);
+        FindIterable<Document> iterable = userCollection.find().projection(projection);
+        if (limit > 0) iterable = iterable.limit(limit);
+        iterable.into(users);
+        return users;
     }
 }

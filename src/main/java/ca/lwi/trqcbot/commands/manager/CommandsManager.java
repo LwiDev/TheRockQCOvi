@@ -1,6 +1,7 @@
 package ca.lwi.trqcbot.commands.manager;
 
 import ca.lwi.trqcbot.commands.Command;
+import ca.lwi.trqcbot.commands.list.ComLeaderboard;
 import ca.lwi.trqcbot.commands.list.ComRank;
 import ca.lwi.trqcbot.commands.list.ComTR8;
 import ca.lwi.trqcbot.commands.list.ComTicket;
@@ -25,6 +26,7 @@ public class CommandsManager extends ListenerAdapter {
     }
 
     public void registerCommands(){
+        registerCommand(new ComLeaderboard());
         registerCommand(new ComRank());
         registerCommand(new ComTicket());
         registerCommand(new ComTR8());
