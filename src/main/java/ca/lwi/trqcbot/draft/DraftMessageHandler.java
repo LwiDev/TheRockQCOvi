@@ -1,4 +1,4 @@
-package ca.lwi.trqcbot.handlers;
+package ca.lwi.trqcbot.draft;
 
 import ca.lwi.trqcbot.Main;
 import ca.lwi.trqcbot.utils.FontUtils;
@@ -23,9 +23,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-public class WelcomeMessageHandler {
+public class DraftMessageHandler {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(WelcomeMessageHandler.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(DraftMessageHandler.class);
 
     private final String welcomeChannel = "1356752351561781349";
     private MongoCollection<Document> teamsCollection;
@@ -33,11 +33,11 @@ public class WelcomeMessageHandler {
     private final Random random;
     private final int tradeChance;
 
-    public WelcomeMessageHandler() {
+    public DraftMessageHandler() {
         this.teamsCollection = Main.getMongoConnection().getDatabase().getCollection("teams");
         this.draftHistoryCollection = Main.getMongoConnection().getDatabase().getCollection("data_history");
         this.random = new Random();
-        this.tradeChance = 100;
+        this.tradeChance = 1;
     }
 
     public void createMessage(Guild guild, Member member) {
@@ -281,6 +281,10 @@ public class WelcomeMessageHandler {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
+        g.setRenderingHint(RenderingHints.KEY_COLOR_RENDERING, RenderingHints.VALUE_COLOR_RENDER_QUALITY);
+        g.setRenderingHint(RenderingHints.KEY_DITHERING, RenderingHints.VALUE_DITHER_ENABLE);
 
         // Convertir la couleur hex en couleur Java
         Color teamColor = parseColor(colorHex);
@@ -372,9 +376,7 @@ public class WelcomeMessageHandler {
                 int originalLogoY = teamBoxY + (teamBoxHeight - originalLogoSize) / 2;
 
                 // Chargement simple du logo
-                BufferedImage originalLogo = ImageUtils.loadImage(originalTeam, 200);
-
-                // Dessiner directement le logo original
+                BufferedImage originalLogo = ImageUtils.loadImage(originalTeam, 400);
                 g.drawImage(originalLogo, originalLogoX, originalLogoY, originalLogoSize, originalLogoSize, null);
             } catch (Exception e) {
                 System.err.println("Erreur logo: " + e.getMessage());

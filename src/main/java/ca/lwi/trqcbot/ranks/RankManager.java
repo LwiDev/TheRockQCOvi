@@ -105,7 +105,7 @@ public class RankManager extends ListenerAdapter {
             System.out.println("recrueRole is null");
         }
 
-        Main.getWelcomeMessageHandler().createMessage(e.getGuild(), e.getMember());
+        Main.getDraftMessageHandler().createMessage(e.getGuild(), e.getMember());
     }
     
     @Override

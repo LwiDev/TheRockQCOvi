@@ -2,7 +2,7 @@ package ca.lwi.trqcbot;
 
 import ca.lwi.trqcbot.commands.manager.CommandsManager;
 import ca.lwi.trqcbot.donations.DonationsManager;
-import ca.lwi.trqcbot.handlers.WelcomeMessageHandler;
+import ca.lwi.trqcbot.draft.DraftMessageHandler;
 import ca.lwi.trqcbot.mongo.MongoConnection;
 import ca.lwi.trqcbot.mongo.MongoCredentials;
 import ca.lwi.trqcbot.ranks.RankManager;
@@ -42,7 +42,7 @@ public class Main {
     @Getter
     private static TicketsHandler ticketsHandler;
     @Getter
-    private static WelcomeMessageHandler welcomeMessageHandler;
+    private static DraftMessageHandler draftMessageHandler;
 
     public static void main(String[] args) throws IOException, FontFormatException {
         System.setProperty("log4j2.disable.jmx", "true");
@@ -64,7 +64,7 @@ public class Main {
         resourcesManager = new ResourcesManager();
         teamManager = new TeamManager();
         ticketsHandler = new TicketsHandler();
-        welcomeMessageHandler = new WelcomeMessageHandler();
+        draftMessageHandler = new DraftMessageHandler();
         YouTubeWatcher watcher = new YouTubeWatcher();
 
         jda = JDABuilder

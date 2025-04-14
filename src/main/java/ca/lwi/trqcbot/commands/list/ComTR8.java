@@ -28,7 +28,7 @@ public class ComTR8 extends Command {
         super("tr8", "Commande principale");
 
         setDefaultPermissions(DefaultMemberPermissions.DISABLED);
-        SubcommandData welcomeCmd = new SubcommandData("welcome", "Créer un message de bienvenue basé sur les données existantes")
+        SubcommandData welcomeCmd = new SubcommandData("draft", "Créer un message de bienvenue basé sur les données existantes")
                 .addOption(OptionType.USER, "utilisateur", "L'utilisateur pour lequel créer le message (par défaut: vous-même)", false);
 
         // Sous-commandes de Resources
@@ -82,7 +82,7 @@ public class ComTR8 extends Command {
 
         try {
             if (subcommandGroup == null) {
-                if (subcommandName.equalsIgnoreCase("welcome")) {
+                if (subcommandName.equalsIgnoreCase("draft")) {
                     e.deferReply(true).queue();
                     handleWelcomeMessage(e);
                 } else {
@@ -177,7 +177,7 @@ public class ComTR8 extends Command {
             e.getHook().sendMessage("Impossible de trouver cet utilisateur.").setEphemeral(true).queue();
             return;
         }
-        Main.getWelcomeMessageHandler().createWelcomeMessageFromDb(guild, targetMember);
+        Main.getDraftMessageHandler().createWelcomeMessageFromDb(guild, targetMember);
         e.getHook().deleteOriginal().queue();
     }
 
