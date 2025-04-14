@@ -3,6 +3,7 @@ package ca.lwi.trqcbot.commands.list;
 import ca.lwi.trqcbot.Main;
 import ca.lwi.trqcbot.commands.Command;
 import ca.lwi.trqcbot.reputation.ReputationManager;
+import ca.lwi.trqcbot.utils.FontUtils;
 import io.github.cdimascio.dotenv.Dotenv;
 import lombok.Getter;
 import lombok.Setter;
@@ -130,7 +131,7 @@ public class ComLeaderboard extends Command {
         }
     }
 
-    private ByteArrayOutputStream generateLeaderboardImage(List<UserReputation> users) throws IOException {
+    private ByteArrayOutputStream generateLeaderboardImage(List<UserReputation> users) throws IOException, FontFormatException {
         final int width = 800;
 
         // Hauteur calculée précisément pour le nombre d'utilisateurs
@@ -153,7 +154,7 @@ public class ComLeaderboard extends Command {
         g2d.fillRect(0, 0, width, height);
 
         // Titre du leaderboard
-        g2d.setFont(new Font("Arial Unicode MS", Font.BOLD, 36));
+        g2d.setFont(new Font("Arial", Font.BOLD, 36));
         g2d.setColor(Color.WHITE);
         String title = "CLASSEMENT";
         FontMetrics metrics = g2d.getFontMetrics();
@@ -165,7 +166,7 @@ public class ComLeaderboard extends Command {
         g2d.fillRect(50, 75, width - 100, 2);
 
         // Entêtes des colonnes
-        g2d.setFont(new Font("Arial Unicode MS", Font.BOLD, 18));
+        g2d.setFont(new Font("Arial", Font.BOLD, 18));
         g2d.setColor(new Color(180, 180, 180));
         g2d.drawString("RANG", 50, 110);
         g2d.drawString("JOUEUR", 150, 110);
@@ -190,7 +191,7 @@ public class ComLeaderboard extends Command {
             g2d.fillRect(40, rowY, width - 80, 50);
 
             // Position (rang)
-            g2d.setFont(new Font("Arial Unicode MS", Font.BOLD, 24));
+            g2d.setFont(new Font("Arial", Font.BOLD, 24));
 
             // Couleurs spéciales pour le top 3
             switch (user.getRank()) {
@@ -212,7 +213,7 @@ public class ComLeaderboard extends Command {
 
             // Nom d'utilisateur
             g2d.setColor(Color.WHITE);
-            g2d.setFont(new Font("Arial Unicode MS", Font.BOLD, 20));
+            g2d.setFont(new Font("Arial", Font.BOLD, 20));
             g2d.drawString(user.getUsername(), 150, rowY + 32);
 
             // Équipe
@@ -238,25 +239,24 @@ public class ComLeaderboard extends Command {
                     g2d.drawImage(circularLogo, logoX, logoY, null);
                 } else {
                     // Si pas de logo, afficher le nom de l'équipe comme avant
-                    g2d.setFont(new Font("Arial Unicode MS", Font.PLAIN, 18));
+                    g2d.setFont(new Font("Arial", Font.BOLD, 18));
                     g2d.setColor(new Color(180, 180, 180));
                     g2d.drawString(user.getTeamName(), 400, rowY + 32);
                 }
             } catch (Exception e) {
                 // En cas d'erreur, afficher le nom de l'équipe
-                g2d.setFont(new Font("Arial Unicode MS", Font.PLAIN, 18));
+                g2d.setFont(new Font("Arial", Font.BOLD, 18));
                 g2d.setColor(new Color(180, 180, 180));
                 g2d.drawString(user.getTeamName(), 400, rowY + 32);
                 System.err.println("Erreur lors du chargement du logo: " + e.getMessage());
             }
 
             // Niveau de réputation
-            g2d.setColor(ReputationManager.getRepurationRankColor(user.getReputationRank()));
-            g2d.drawString(user.getReputationRank(), 500, rowY + 32);
+            FontUtils.drawMixedEmojiText(g2d, user.getReputationRank(), 500, rowY + 32, 18, new Font("Arial", Font.BOLD, 18), ReputationManager.getReputationRankColor(user.getReputationRank()));
 
             // Score
             g2d.setColor(Color.WHITE);
-            g2d.drawString(String.valueOf(user.getReputationScore()), 710, rowY + 32);
+            g2d.drawString(String.valueOf(user.getReputationScore()) + "%", 710, rowY + 32);
 
             rowY += 60;
         }

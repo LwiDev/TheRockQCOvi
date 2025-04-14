@@ -185,7 +185,7 @@ public class ReputationManager {
         }
     }
 
-    public static Color getRepurationRankColor(String rank) {
+    public static Color getReputationRankColor(String rank) {
         return switch (rank) {
             case "🌟 Légende" -> new Color(255, 215, 0); // Or
             case "🔥 Respecté" -> new Color(220, 100, 50); // Orange-rouge
@@ -193,5 +193,13 @@ public class ReputationManager {
             case "👋 Présent" -> new Color(100, 220, 100); // Vert
             default -> new Color(150, 150, 150); // Gris
         };
+    }
+
+    public static Color getReputationColorFromScore(int score) {
+        if (score > 90) return new Color(255, 215, 0);      // Or
+        if (score > 60) return new Color(220, 100, 50);     // Orange-rouge
+        if (score > 40) return new Color(100, 180, 220);    // Bleu clair
+        if (score > 20) return new Color(100, 220, 100);    // Vert pour
+        return new Color(150, 150, 150);                    // Gris pour
     }
 }

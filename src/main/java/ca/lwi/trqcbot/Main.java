@@ -9,6 +9,7 @@ import ca.lwi.trqcbot.ranks.RankManager;
 import ca.lwi.trqcbot.ressources.ResourcesManager;
 import ca.lwi.trqcbot.teams.TeamManager;
 import ca.lwi.trqcbot.tickets.TicketsHandler;
+import ca.lwi.trqcbot.utils.FontUtils;
 import ca.lwi.trqcbot.youtube.YouTubeWatcher;
 import io.github.cdimascio.dotenv.Dotenv;
 import lombok.Getter;
@@ -20,6 +21,8 @@ import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import org.jetbrains.annotations.NotNull;
 
+import java.awt.*;
+import java.io.IOException;
 import java.util.Scanner;
 
 public class Main {
@@ -41,11 +44,12 @@ public class Main {
     @Getter
     private static WelcomeMessageHandler welcomeMessageHandler;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException, FontFormatException {
         System.setProperty("log4j2.disable.jmx", "true");
         System.out.println("Starting server...");
 
         Dotenv dotenv = Dotenv.load();
+        FontUtils.loadFonts();
 
         MongoCredentials mongoCredentials = new MongoCredentials(dotenv.get("DB_IP"), dotenv.get("DB_PASSWORD"), dotenv.get("DB_USERNAME"), dotenv.get("DB_DATABASE"));
         mongoConnection = new MongoConnection(mongoCredentials);

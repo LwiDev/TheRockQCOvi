@@ -272,11 +272,18 @@ public class ComRank extends Command {
         String[] statValues = {
                 String.valueOf(draftDate),
                 String.valueOf(reputationRank),
-                String.valueOf(reputationScore)
+                reputationScore + "%"
         };
 
-        g2d.setFont(new Font("Segoe UI Emoji", Font.BOLD, 28));
+        g2d.setFont(new Font("Arial", Font.BOLD, 20));
         int lineHeight = 60;
+        int rightMargin = 60;
+
+        FontMetrics fm = g2d.getFontMetrics();
+        int maxValueWidth = Math.max(fm.stringWidth(statValues[0]), fm.stringWidth(statValues[1]));
+
+        // Définir une largeur de barre raisonnable qui ne dépasse pas la largeur du texte le plus long
+        int barWidth = Math.min(180, maxValueWidth);
 
         for (int i = 0; i < statNames.length; i++) {
             int y = startY + 75 + (i * lineHeight);
@@ -285,11 +292,51 @@ public class ComRank extends Command {
             g2d.setColor(Color.WHITE);
             g2d.drawString(statNames[i], 60, y);
 
-            // Stat value (right-aligned)
-            String value = statValues[i];
-            int valueWidth = g2d.getFontMetrics().stringWidth(value);
-            g2d.setColor(Color.WHITE);
-            g2d.drawString(value, width - 60 - valueWidth, y);
+            if (statNames[i].equals("Niveau")) {
+                String value = statValues[i];
+                int valueWidth = fm.stringWidth(value);
+                int valueX = width - rightMargin - valueWidth;
+                FontUtils.drawMixedEmojiText(g2d, value, valueX, y, 20, new Font("Arial", Font.BOLD, 20), Color.WHITE);
+            } else if (statNames[i].equals("Score")) {
+                // Barre de progression (alignée à droite, même largeur que le texte ci-dessus)
+                int barHeight = 20;
+                int barX = width - rightMargin - barWidth;
+                int barY = y - 15;
+
+                // Fond de la barre (gris foncé)
+                g2d.setColor(new Color(40, 40, 50));
+                g2d.fillRect(barX, barY, barWidth, barHeight);
+
+                // Partie remplie de la barre
+                Color scoreColor = ReputationManager.getReputationColorFromScore(reputationScore);
+                int fillWidth = (int)(barWidth * reputationScore / 100.0);
+                g2d.setColor(scoreColor);
+                g2d.fillRect(barX, barY, fillWidth, barHeight);
+
+                // Contour de la barre
+                g2d.setColor(new Color(70, 70, 80));
+                g2d.drawRect(barX, barY, barWidth, barHeight);
+
+                // Affichage du pourcentage à l'intérieur de la barre
+                String scoreText = reputationScore + "%";
+                Font scoreFont = new Font("Arial", Font.BOLD, 14);
+                g2d.setFont(scoreFont);
+                FontMetrics scoreFm = g2d.getFontMetrics();
+                int textWidth = scoreFm.stringWidth(scoreText);
+                int textX = barX + (barWidth - textWidth) / 2;
+                int textY = barY + ((barHeight - scoreFm.getHeight()) / 2) + scoreFm.getAscent();
+
+                g2d.setColor(Color.WHITE);
+                g2d.drawString(scoreText, textX, textY);
+
+                // Revenir à la police d'origine
+                g2d.setFont(new Font("Arial", Font.BOLD, 20));
+            } else {
+                String value = statValues[i];
+                int valueWidth = fm.stringWidth(value);
+                g2d.setColor(Color.WHITE);
+                g2d.drawString(value, width - rightMargin - valueWidth, y);
+            }
 
             // Separator line between stats
             if (i < statNames.length - 1) {
