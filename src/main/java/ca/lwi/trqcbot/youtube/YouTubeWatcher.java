@@ -90,16 +90,12 @@ public class YouTubeWatcher {
                     "🔥 TheRock vient de publier une **nouvelle vidéo**, et vous êtes parmi les premiers à en être informés.\n\n" +
                     "📌 **" + title + "**\n" +
                     "🔗 [Regardez-la en avant-première ici](" + urlVideo + ")\n\n" +
-                    "🙏 Merci pour votre soutien. C’est grâce à vous que l’aventure continue !\n" +
-                    "Vos commentaires comptent plus que jamais 💬\n \n" +
                     "||<@&" + veteranRoleId + ">||";
         } else {
-            message = "@everyone 📢 **Nouvelle vidéo en ligne !**\n" +
+            message = "📢 **Nouvelle vidéo en ligne !**\n" +
                     "🎬 TheRock vient tout juste de sortir une **nouvelle vidéo**, et ça vaut le détour !\n\n" +
                     "📌 **" + title + "**\n" +
                     "🔗 [Clique ici pour la regarder](" + urlVideo + ")\n\n" +
-                    "💬 Vos retours comptent — passez voir ça et faites entendre votre voix dans les commentaires !\n" +
-                    "Merci de faire partie de l'équipe 🙌\n \n" +
                     "||@everyone||";
         }
         channel.sendMessage(message).queue();

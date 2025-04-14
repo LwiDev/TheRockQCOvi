@@ -13,6 +13,8 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ResourcesMessageHandler {
 
@@ -35,7 +37,7 @@ public class ResourcesMessageHandler {
      * @param forceNewMessage If true, creates a new message even if one exists
      * @return CompletableFuture that completes when operation is done
      */
-    public static CompletableFuture<Void> updateResourcesMessage(boolean forceNewMessage) {
+    public static CompletableFuture<Void> updateResourcesMessages(boolean forceNewMessages) {
         CompletableFuture<Void> future = new CompletableFuture<>();
 
         try {
@@ -46,34 +48,34 @@ public class ResourcesMessageHandler {
                 return future;
             }
 
-            String messageContent = generateResourcesMessage(channel.getGuild());
-            Document storedMessage = collection.find(Filters.eq("channelId", TARGET_CHANNEL_ID)).first();
+            // Générer le contenu des différentes sections
+            List<String> messageParts = generateResourceMessageParts(channel.getGuild());
 
-            if (storedMessage != null && !forceNewMessage) {
-                String messageId = storedMessage.getString("messageId");
-                channel.retrieveMessageById(messageId).queue(
-                        message -> {
-                            message.editMessage(messageContent).queue(
-                                    updated -> future.complete(null),
-                                    error -> {
-                                        LOGGER.error("Failed to update resources message: {}", error.getMessage());
-                                        // If editing fails, create a new message
-                                        createNewResourcesMessage(channel, messageContent, future);
-                                    }
-                            );
-                        },
-                        error -> {
-                            LOGGER.error("Failed to retrieve resources message: {}", error.getMessage());
-                            // Message might have been deleted, create a new one
-                            createNewResourcesMessage(channel, messageContent, future);
-                        }
-                );
+            Document storedData = collection.find(Filters.eq("channelId", TARGET_CHANNEL_ID)).first();
+
+            if (storedData != null && !forceNewMessages && storedData.containsKey("messageIds")) {
+                List<String> messageIds = storedData.getList("messageIds", String.class, new ArrayList<>());
+
+                // Si le nombre de messages stockés correspond au nombre de parties que nous avons
+                if (messageIds.size() == messageParts.size()) {
+                    updateExistingMessages(channel, messageIds, messageParts, future);
+                } else {
+                    // Le nombre de messages ne correspond pas, créer de nouveaux messages
+                    deleteExistingMessages(channel, messageIds);
+                    createNewResourcesMessages(channel, messageParts, future);
+                }
             } else {
-                // Create a new message
-                createNewResourcesMessage(channel, messageContent, future);
+                // Aucun message stocké ou force new messages, créer de nouveaux messages
+                if (storedData != null && storedData.containsKey("messageId")) {
+                    // Supprimer l'ancien message unique s'il existe
+                    String oldMessageId = storedData.getString("messageId");
+                    channel.retrieveMessageById(oldMessageId)
+                            .queue(message -> message.delete().queue(), error -> {/* Ignorer l'erreur si le message n'existe plus */});
+                }
+                createNewResourcesMessages(channel, messageParts, future);
             }
         } catch (Exception e) {
-            LOGGER.error("Error in updateResourcesMessage: {}", e.getMessage(), e);
+            LOGGER.error("Error in updateResourcesMessages: {}", e.getMessage(), e);
             future.completeExceptionally(e);
         }
 
@@ -83,95 +85,165 @@ public class ResourcesMessageHandler {
     /**
      * Creates a new resources message in the channel
      */
-    private static void createNewResourcesMessage(TextChannel channel, String messageContent, CompletableFuture<Void> future) {
-        channel.sendMessage(messageContent).queue(
-                message -> {
-                    Document doc = new Document()
-                            .append("channelId", channel.getId())
-                            .append("messageId", message.getId())
-                            .append("lastUpdated", System.currentTimeMillis());
-                    collection.updateOne(
-                            Filters.eq("channelId", channel.getId()),
-                            new Document("$set", doc),
-                            new UpdateOptions().upsert(true)
-                    );
-                    future.complete(null);
-                    LOGGER.info("New resources message created in channel {}", channel.getId());
-                },
-                error -> {
-                    LOGGER.error("Failed to send resources message: {}", error.getMessage());
-                    future.completeExceptionally(error);
-                }
-        );
-    }
-
-    /**
-     * Generates the resources text message using data from MongoDB
-     * Includes role and channel mentions
-     */
-    private static String generateResourcesMessage(Guild guild) {
+    private static List<String> generateResourceMessageParts(Guild guild) {
         Document configDoc = getOrCreateConfigDocument();
         String serverName = configDoc.getString(KEY_SERVER_NAME);
 
-        List<Document> roles = configDoc.getList(KEY_ROLES, Document.class, new ArrayList<>());
+        List<String> messageParts = new ArrayList<>();
+
+        // Partie 1: Introduction
+        String intro = "# 📚 Bienvenue sur le serveur de " + serverName + " !\n\n" +
+                "Ici, tu peux discuter de NHL 25, suivre les vidéos du créateur et interagir avec la " +
+                "communauté. Avant de commencer, voici quelques infos essentielles !";
+        messageParts.add(intro);
+
+        // Partie 2: Catégories
         List<Document> categories = configDoc.getList(KEY_CATEGORIES, Document.class, new ArrayList<>());
-        List<Document> importantChannels = configDoc.getList(KEY_IMPORTANT_CHANNELS, Document.class, new ArrayList<>());
-        List<Document> usefulLinks = configDoc.getList(KEY_USEFUL_LINKS, Document.class, new ArrayList<>());
-
-        StringBuilder message = new StringBuilder();
-
-        // Title and introduction
-        message.append("# 📚 Bienvenue sur le serveur de ").append(serverName).append(" !\n\n");
-        message.append("Ici, tu peux discuter de NHL 25, suivre les vidéos du créateur et interagir avec la ");
-        message.append("communauté. Avant de commencer, voici quelques infos essentielles !\n\n");
-
-        // Categories section
         if (!categories.isEmpty()) {
-            message.append("## 📂 Les catégories\n");
+            StringBuilder catSection = new StringBuilder();
+            catSection.append("## 📂 Les catégories\n");
             for (Document category : categories) {
                 String emoji = category.getString("emoji");
                 String name = category.getString("name");
                 String description = category.getString("description");
-                message.append("• ").append(emoji).append(" **").append(name).append("** → ").append(description).append("\n");
+                catSection.append("• ").append(emoji).append(" **").append(name).append("** → ").append(description).append("\n");
             }
-            message.append("\n");
+            messageParts.add(catSection.toString());
         }
 
-        // Roles section with role mentions
+        // Partie 3: Rôles
+        List<Document> roles = configDoc.getList(KEY_ROLES, Document.class, new ArrayList<>());
         if (!roles.isEmpty()) {
-            message.append("## 👥 Les rôles\n");
+            StringBuilder roleSection = new StringBuilder();
+            roleSection.append("⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n");
+            roleSection.append("## 👥 Les rôles\n");
             for (Document roleDoc : roles) {
                 String id = roleDoc.getString("id");
                 String description = roleDoc.getString("description");
-                message.append("• <@&").append(id).append("> → ").append(description).append("\n");
+                roleSection.append("• <@&").append(id).append("> → ").append(description).append("\n");
             }
-            message.append("\n");
+            messageParts.add(roleSection.toString());
         }
 
-        // Important channels section with channel mentions
+        // Partie 4: Canaux importants
+        List<Document> importantChannels = configDoc.getList(KEY_IMPORTANT_CHANNELS, Document.class, new ArrayList<>());
         if (!importantChannels.isEmpty()) {
-            message.append("## 📌 Salons importants\n");
+            StringBuilder channelSection = new StringBuilder();
+            channelSection.append("⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n");
+            channelSection.append("## 📌 Salons importants\n");
             for (Document channelDoc : importantChannels) {
                 String id = channelDoc.getString("id");
                 String description = channelDoc.getString("description");
-                message.append("• <#").append(id).append("> → ").append(description).append("\n");
+                channelSection.append("• <#").append(id).append("> → ").append(description).append("\n");
             }
-            message.append("\n");
+            messageParts.add(channelSection.toString());
         }
 
-        // Useful links section
+        // Partie 5: Liens utiles
+        List<Document> usefulLinks = configDoc.getList(KEY_USEFUL_LINKS, Document.class, new ArrayList<>());
         if (!usefulLinks.isEmpty()) {
+            StringBuilder linkSection = new StringBuilder();
+            linkSection.append("⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n");
             String linkTitle = usefulLinks.size() > 1 ? "## 🔗 Liens utiles" : "## 🔗 Lien utile";
-            message.append(linkTitle).append("\n");
+            linkSection.append(linkTitle).append("\n");
             for (Document link : usefulLinks) {
                 String emoji = link.getString("emoji");
                 String name = link.getString("name");
                 String url = link.getString("url");
-                message.append("• ").append(emoji).append(" [").append(name).append("](").append(url).append(")\n");
+                linkSection.append("• ").append(emoji).append(" [").append(name).append("](").append(url).append(")\n");
             }
-            message.append("\n");
+            messageParts.add(linkSection.toString());
         }
-        return message.toString();
+
+        return messageParts;
+    }
+
+    private static void updateExistingMessages(TextChannel channel, List<String> messageIds,
+                                               List<String> messageParts, CompletableFuture<Void> future) {
+        AtomicInteger completedUpdates = new AtomicInteger(0);
+        AtomicBoolean failedUpdate = new AtomicBoolean(false);
+
+        for (int i = 0; i < messageIds.size(); i++) {
+            final int index = i;
+            channel.retrieveMessageById(messageIds.get(i)).queue(
+                    message -> {
+                        message.editMessage(messageParts.get(index)).queue(
+                                updated -> {
+                                    if (completedUpdates.incrementAndGet() == messageIds.size() && !failedUpdate.get()) {
+                                        future.complete(null);
+                                    }
+                                },
+                                error -> {
+                                    if (!failedUpdate.get()) {
+                                        failedUpdate.set(true);
+                                        LOGGER.error("Failed to update message part {}: {}", index, error.getMessage());
+                                        // Si la mise à jour échoue, supprimer tous les messages et en créer de nouveaux
+                                        deleteExistingMessages(channel, messageIds);
+                                        createNewResourcesMessages(channel, messageParts, future);
+                                    }
+                                }
+                        );
+                    },
+                    error -> {
+                        if (!failedUpdate.get()) {
+                            failedUpdate.set(true);
+                            LOGGER.error("Failed to retrieve message part {}: {}", index, error.getMessage());
+                            // Si la récupération échoue, supprimer tous les messages et en créer de nouveaux
+                            deleteExistingMessages(channel, messageIds);
+                            createNewResourcesMessages(channel, messageParts, future);
+                        }
+                    }
+            );
+        }
+    }
+
+    private static void deleteExistingMessages(TextChannel channel, List<String> messageIds) {
+        for (String messageId : messageIds) {
+            channel.retrieveMessageById(messageId).queue(
+                    message -> message.delete().queue(
+                            success -> LOGGER.info("Deleted old message: {}", messageId),
+                            error -> LOGGER.warn("Failed to delete message {}: {}", messageId, error.getMessage())
+                    ),
+                    error -> LOGGER.warn("Failed to retrieve message for deletion {}: {}", messageId, error.getMessage())
+            );
+        }
+    }
+
+    private static void createNewResourcesMessages(TextChannel channel, List<String> messageParts,
+                                                   CompletableFuture<Void> future) {
+        List<String> newMessageIds = new ArrayList<>();
+        sendMessagesSequentially(channel, messageParts, 0, newMessageIds, future);
+    }
+
+    private static void sendMessagesSequentially(TextChannel channel, List<String> messageParts, int index,
+                                                 List<String> messageIds, CompletableFuture<Void> future) {
+        if (index >= messageParts.size()) {
+            // Tous les messages ont été envoyés avec succès
+            Document doc = new Document()
+                    .append("channelId", channel.getId())
+                    .append("messageIds", messageIds)
+                    .append("lastUpdated", System.currentTimeMillis());
+            collection.updateOne(
+                    Filters.eq("channelId", channel.getId()),
+                    new Document("$set", doc),
+                    new UpdateOptions().upsert(true)
+            );
+            future.complete(null);
+            LOGGER.info("All resource messages created in channel {}", channel.getId());
+            return;
+        }
+
+        channel.sendMessage(messageParts.get(index)).queue(
+                message -> {
+                    messageIds.add(message.getId());
+                    // Passer au message suivant
+                    sendMessagesSequentially(channel, messageParts, index + 1, messageIds, future);
+                },
+                error -> {
+                    LOGGER.error("Failed to send message part {}: {}", index, error.getMessage());
+                    future.completeExceptionally(error);
+                }
+        );
     }
 
     /**
@@ -209,7 +281,7 @@ public class ResourcesMessageHandler {
             );
 
             // Update the message after section change
-            return updateResourcesMessage(false);
+            return updateResourcesMessages(false);
         } catch (Exception e) {
             LOGGER.error("Error updating section {}: {}", sectionKey, e.getMessage(), e);
             future.completeExceptionally(e);
@@ -234,7 +306,7 @@ public class ResourcesMessageHandler {
             );
 
             // Update the message after section change
-            return updateResourcesMessage(false);
+            return updateResourcesMessages(false);
         } catch (Exception e) {
             LOGGER.error("Error updating server name: {}", e.getMessage(), e);
             future.completeExceptionally(e);

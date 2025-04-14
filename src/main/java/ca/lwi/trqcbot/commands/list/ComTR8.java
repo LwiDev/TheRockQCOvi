@@ -51,13 +51,14 @@ public class ComTR8 extends Command {
         SubcommandGroupData donationsGroup = new SubcommandGroupData("dons", "Gérer le message du salon règlement");
         SubcommandData showDonorCmd = new SubcommandData("update", "Afficher le tableau des donateurs");
         showDonorCmd.addOption(OptionType.BOOLEAN, "force_new", "Créer un nouveau message même si un existe déjà", false);
-        SubcommandData addToDonorCmd = new SubcommandData("add", "Ajouter un don à un donateur existant");
-        addToDonorCmd.addOption(OptionType.STRING, "donateur", "Nom du donateur", true, true);
-        SubcommandData addNewDonorCmd = new SubcommandData("new", "Ajouter un nouveau donateur");
+        SubcommandData addDonorCmd = new SubcommandData("add", "Ajouter un don");
+        addDonorCmd.addOption(OptionType.STRING, "donateur", "Nom du donateur (laissez vide pour un nouveau donateur)", false, true);
+        addDonorCmd.addOption(OptionType.INTEGER, "montant", "Montant du don (optionnel, sinon une fenêtre s'ouvrira)", false);
         SubcommandData viewCmd = new SubcommandData("view", "Voir la liste des donateurs de façon interactive");
         SubcommandData removeDonationCmd = new SubcommandData("remove", "Retirer un don à un donateur existant");
         removeDonationCmd.addOption(OptionType.STRING, "donateur", "Nom du donateur", true, true);
-        donationsGroup.addSubcommands(showDonorCmd, addToDonorCmd, addNewDonorCmd, viewCmd, removeDonationCmd);
+        removeDonationCmd.addOption(OptionType.INTEGER, "montant", "Montant du don (optionnel, sinon une fenêtre s'ouvrira)", false);
+        donationsGroup.addSubcommands(showDonorCmd, addDonorCmd, viewCmd, removeDonationCmd);
 
         // Ajouter les sous-commandes et le groupe à la commande principale
         addSubcommands(welcomeCmd);
@@ -93,13 +94,10 @@ public class ComTR8 extends Command {
                             Main.getDonationsManager().handleUpdateDonors(e);
                             break;
                         case "add":
-                            Main.getDonationsManager().handleAddToDonor(e);
+                            Main.getDonationsManager().handleAddDonation(e);
                             break;
                         case "remove":
                             Main.getDonationsManager().handleRemoveDonation(e);
-                            break;
-                        case "new":
-                            Main.getDonationsManager().handleAddNewDonor(e);
                             break;
                         case "view":
                             handleViewDonors(e);

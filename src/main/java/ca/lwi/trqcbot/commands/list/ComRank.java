@@ -4,6 +4,7 @@ import ca.lwi.trqcbot.Main;
 import ca.lwi.trqcbot.commands.Command;
 import ca.lwi.trqcbot.reputation.ReputationManager;
 import ca.lwi.trqcbot.utils.FontUtils;
+import io.github.cdimascio.dotenv.Dotenv;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
@@ -28,14 +29,26 @@ import java.util.Objects;
 
 public class ComRank extends Command {
 
+    private String channelId;
+
     public ComRank() {
         super("rank", "Affichez votre rang actuel sur le serveur");
         setDefaultPermissions(DefaultMemberPermissions.ENABLED);
+
+        Dotenv dotenv = Dotenv.load();
+        this.channelId = dotenv.get("CHANNEL_QG_DES_STATS_ID");
     }
 
     @Override
     public void onSlash(SlashCommandInteractionEvent e) {
+        if (channelId == null || !Objects.requireNonNull(e.getChannelId()).equalsIgnoreCase(channelId)) {
+            e.reply("> 🛑 Cette commande ne peut être utilisée ici.\n" +
+                    "> Dirige-toi vers le salon <#" + channelId + "> pour utiliser /rank.").setEphemeral(true).queue();
+            return;
+        }
+
         e.deferReply().queue();
+
         String userId = e.getUser().getId();
         Document userData = Main.getRankManager().getUserData(userId);
         if (userData != null) {

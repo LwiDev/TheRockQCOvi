@@ -70,12 +70,12 @@ public class ResourcesManager {
     public void handleUpdate(SlashCommandInteractionEvent e) {
         boolean forceNew = e.getOption("force_new") != null && Objects.requireNonNull(e.getOption("force_new")).getAsBoolean();
 
-        ResourcesMessageHandler.updateResourcesMessage(forceNew)
-                .thenAccept(v -> e.getHook().sendMessage("✅ Le message a été mis à jour.").queue(message -> {
+        ResourcesMessageHandler.updateResourcesMessages(forceNew)
+                .thenAccept(v -> e.getHook().sendMessage("✅ Le message de ressources ont été mis à jour.").queue(message -> {
                     message.delete().queueAfter(3, java.util.concurrent.TimeUnit.SECONDS);
                 }))
                 .exceptionally(error -> {
-                    LOGGER.error("Erreur lors de la mise à jour du message : {}", error.getMessage(), error);
+                    LOGGER.error("Erreur lors de la mise à jour des messages : {}", error.getMessage(), error);
                     e.getHook().sendMessage("❌ Erreur lors de la mise à jour : " + error.getMessage()).queue();
                     return null;
                 });
