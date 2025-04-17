@@ -1,5 +1,7 @@
 package ca.lwi.trqcbot.utils;
 
+import ca.lwi.trqcbot.commands.list.ComTeam;
+import net.dv8tion.jda.api.entities.User;
 import org.apache.batik.anim.dom.SAXSVGDocumentFactory;
 import org.apache.batik.transcoder.TranscoderInput;
 import org.apache.batik.transcoder.TranscoderOutput;
@@ -18,6 +20,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLConnection;
+import java.util.Objects;
 
 public class ImageUtils {
 
@@ -100,5 +103,17 @@ public class ImageUtils {
 
         if (image == null) throw new IOException("Impossible de charger l'image: " + imagePath);
         return image;
+    }
+
+    public static BufferedImage getUserAvatar(User user) throws IOException, URISyntaxException {
+        URLConnection connection = new URI(user.getAvatarUrl() != null ? user.getAvatarUrl() : user.getDefaultAvatarUrl()).toURL().openConnection();
+        connection.setRequestProperty("User-Agent", "bot emily-bot");
+        BufferedImage profileImg;
+        try {
+            profileImg = ImageIO.read(connection.getInputStream());
+        } catch (Exception ignored) {
+            profileImg = ImageIO.read(Objects.requireNonNull(ComTeam.class.getClassLoader().getResource("default_profile.jpg")));
+        }
+        return profileImg;
     }
 }

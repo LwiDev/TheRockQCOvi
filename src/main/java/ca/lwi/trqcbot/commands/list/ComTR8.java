@@ -31,6 +31,8 @@ public class ComTR8 extends Command {
         SubcommandData welcomeCmd = new SubcommandData("draft", "Créer un message de bienvenue basé sur les données existantes")
                 .addOption(OptionType.USER, "utilisateur", "L'utilisateur pour lequel créer le message (par défaut: vous-même)", false);
 
+        SubcommandData recoveryCmd = new SubcommandData("recovery", "Enregistrer les membres lorsque le bot était fermé");
+
         // Sous-commandes de Resources
         SubcommandGroupData resourcesGroup = new SubcommandGroupData("resources", "Gérer le message du salon ressources");
         SubcommandData resourcesUpdateCmd = new SubcommandData("update", "Mettre à jour le message des ressources");
@@ -61,7 +63,7 @@ public class ComTR8 extends Command {
         donationsGroup.addSubcommands(showDonorCmd, addDonorCmd, viewCmd, removeDonationCmd);
 
         // Ajouter les sous-commandes et le groupe à la commande principale
-        addSubcommands(welcomeCmd);
+        addSubcommands(welcomeCmd, recoveryCmd);
         addSubcommandGroups(resourcesGroup, messagesGroup, donationsGroup);
     }
 
@@ -82,11 +84,17 @@ public class ComTR8 extends Command {
 
         try {
             if (subcommandGroup == null) {
-                if (subcommandName.equalsIgnoreCase("draft")) {
-                    e.deferReply(true).queue();
-                    handleWelcomeMessage(e);
-                } else {
-                    e.reply("Sous-commande inconnue.").setEphemeral(true).queue();
+                switch (subcommandName.toLowerCase()) {
+                    case "draft":
+                        e.deferReply(true).queue();
+                        handleWelcomeMessage(e);
+                        break;
+                    case "recovery":
+                        e.deferReply(true).queue();
+                        Main.getRecoveryHandler().forceRecovery(e);
+                        break;
+                    default:
+                        e.reply("Sous-commande inconnue.").setEphemeral(true).queue();
                 }
             } else {
                 switch (subcommandGroup) {

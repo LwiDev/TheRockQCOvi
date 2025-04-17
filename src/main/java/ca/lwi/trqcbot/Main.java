@@ -6,6 +6,7 @@ import ca.lwi.trqcbot.draft.DraftMessageHandler;
 import ca.lwi.trqcbot.mongo.MongoConnection;
 import ca.lwi.trqcbot.mongo.MongoCredentials;
 import ca.lwi.trqcbot.ranks.RankManager;
+import ca.lwi.trqcbot.recovery.MemberRecoveryHandler;
 import ca.lwi.trqcbot.ressources.ResourcesManager;
 import ca.lwi.trqcbot.teams.TeamManager;
 import ca.lwi.trqcbot.tickets.TicketsHandler;
@@ -43,6 +44,8 @@ public class Main {
     private static TicketsHandler ticketsHandler;
     @Getter
     private static DraftMessageHandler draftMessageHandler;
+    @Getter
+    private static MemberRecoveryHandler recoveryHandler;
 
     public static void main(String[] args) throws IOException, FontFormatException {
         System.setProperty("log4j2.disable.jmx", "true");
@@ -66,6 +69,7 @@ public class Main {
         ticketsHandler = new TicketsHandler();
         draftMessageHandler = new DraftMessageHandler();
         YouTubeWatcher watcher = new YouTubeWatcher();
+        recoveryHandler = new MemberRecoveryHandler();
 
         jda = JDABuilder
                 .create(dotenv.get("DISC_TOKEN"), GatewayIntent.GUILD_MEMBERS, GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_VOICE_STATES)
@@ -74,6 +78,7 @@ public class Main {
                 .addEventListeners(donationsManager)
                 .addEventListeners(rankManager)
                 .addEventListeners(ticketsHandler)
+                .addEventListeners(recoveryHandler)
                 .addEventListeners(new CommandsManager())
                 .build();
 
@@ -87,6 +92,7 @@ public class Main {
             System.out.println("Arrêt du bot en cours...");
             if (rankManager != null) rankManager.shutdown();
             if (mongoConnection != null) mongoConnection.close();
+            if (recoveryHandler != null) recoveryHandler.shutdown();
             if (jda != null) jda.shutdown();
             System.out.println("Arrêt terminé.");
         }));
@@ -114,7 +120,6 @@ public class Main {
     }
 
     public static boolean isTR8Guild(Guild guild) {
-        Dotenv dotenv = Dotenv.load();
-        return guild != null && guild.getId().equals(dotenv.get("GUILD_ID"));
+        return guild != null && guild.getId().equals(Dotenv.load().get("GUILD_ID"));
     }
 }

@@ -21,9 +21,6 @@ import java.awt.geom.Ellipse2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URLConnection;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -34,7 +31,7 @@ public class ComRank extends Command {
     private final String channelId;
 
     public ComRank() {
-        super("rank", "Affichez votre rang actuel sur le serveur");
+        super("rank", "Afficher votre rang actuel sur le serveur");
         setDefaultPermissions(DefaultMemberPermissions.ENABLED);
         addOption(OptionType.USER, "membre", "Utilisateur à rechercher", false);
 
@@ -103,7 +100,7 @@ public class ComRank extends Command {
             }
 
             try {
-                BufferedImage avatar = getUserAvatar(targetUser);
+                BufferedImage avatar = ImageUtils.getUserAvatar(targetUser);
                 ByteArrayOutputStream outputStream = generateModernPlayerCard(username, teamName, formattedDate, ordinal, rank, teamColor, logoPath, avatar, reputationScore, reputationRank);
                 e.getHook().sendFiles(FileUpload.fromData(outputStream.toByteArray(), username + "_rank.png")).queue();
             } catch (Exception ex) {
@@ -345,18 +342,6 @@ public class ComRank extends Command {
                 g2d.drawLine(60, y + 15, width - 60, y + 15);
             }
         }
-    }
-
-    public static BufferedImage getUserAvatar(User user) throws IOException, URISyntaxException {
-        URLConnection connection = new URI(user.getAvatarUrl() != null ? user.getAvatarUrl() : user.getDefaultAvatarUrl()).toURL().openConnection();
-        connection.setRequestProperty("User-Agent", "bot emily-bot");
-        BufferedImage profileImg;
-        try {
-            profileImg = ImageIO.read(connection.getInputStream());
-        } catch (Exception ignored) {
-            profileImg = ImageIO.read(Objects.requireNonNull(ComRank.class.getClassLoader().getResource("default_profile.jpg")));
-        }
-        return profileImg;
     }
 
     private Color getDarkerColor(Color original) {
