@@ -18,7 +18,6 @@ public class MongoConnection {
     public void init() {
         try {
             String strUri = String.format("mongodb+srv://%s:%s@%s/?retryWrites=true&w=majority", mongoCredentials.getUsername(), mongoCredentials.getPassword(), mongoCredentials.getIp());
-            System.out.println("Attempting to connect to MongoDB with URI: " + strUri.replace(mongoCredentials.getPassword(), "****")); // Log sécurisé
             mongoClient = MongoClients.create(strUri);
             mongoClient.listDatabaseNames().first();
             System.out.println("Successfully connected to MongoDB Atlas!");

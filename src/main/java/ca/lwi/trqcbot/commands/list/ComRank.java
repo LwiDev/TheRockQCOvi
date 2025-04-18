@@ -67,7 +67,16 @@ public class ComRank extends Command {
             String teamName = userData.getString("teamName");
             int roundPick = userData.getInteger("roundPick", 0);
             String rank = userData.getString("currentRank");
-            long joinTimestamp = userData.getLong("joinDate");
+
+            Date joinDate;
+            Object joinDateValue = userData.get("joinDate");
+            if (joinDateValue instanceof Long) {
+                joinDate = new Date((Long) joinDateValue);
+            } else if (joinDateValue instanceof Date) {
+                joinDate = (Date) joinDateValue;
+            } else {
+                joinDate = new Date();
+            }
 
             Document reputation = (Document) userData.get("reputation");
             if (reputation == null) reputation = new Document();
@@ -75,7 +84,6 @@ public class ComRank extends Command {
             String reputationRank = ReputationManager.getReputationRank(reputationScore);
 
             // Formatage de la date
-            Date joinDate = new Date(joinTimestamp);
             SimpleDateFormat sdf = new SimpleDateFormat("dd MMMM yyyy", Locale.FRENCH);
             String formattedDate = sdf.format(joinDate);
 

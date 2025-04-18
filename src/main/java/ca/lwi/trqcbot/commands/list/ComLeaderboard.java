@@ -85,17 +85,17 @@ public class ComLeaderboard extends Command {
         }
 
         switch (subcommandName) {
-            case "joueurs":
+            case "players":
                 Member searchedMember = e.getOption("membre") != null ? Objects.requireNonNull(e.getOption("membre")).getAsMember() : null;
                 String searchedUserId = searchedMember != null ? searchedMember.getId() : null;
                 generatePlayerLeaderboard(e, searchedUserId);
                 break;
-            case "equipes":
+            case "teams":
                 String searchedTeamName = e.getOption("equipe") != null ? Objects.requireNonNull(e.getOption("equipe")).getAsString() : null;
                 generateTeamLeaderboard(e, searchedTeamName);
                 break;
             default:
-                e.getHook().sendMessage("Commande non reconnue. Veuillez utiliser /leaderboard joueurs ou /leaderboard equipes").queue();
+                e.getHook().sendMessage("Commande non reconnue. Veuillez utiliser /leaderboard players ou /leaderboard teams").queue();
         }
     }
 
