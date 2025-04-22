@@ -26,6 +26,7 @@ public class CommandsManager extends ListenerAdapter {
     public void registerCommands(){
         ComTeam teamCommand = new ComTeam();
 
+        registerCommand(new ComContract());
         registerCommand(new ComLeaderboard());
         registerCommand(new ComRank());
         registerCommand(new ComTicket());
@@ -63,7 +64,7 @@ public class CommandsManager extends ListenerAdapter {
     @Override
     public void onReady(@NotNull ReadyEvent e) {
         e.getJDA().updateCommands().addCommands(this.commands.stream().filter(command -> !command.isGuildCommand()).collect(Collectors.toList())).queue();
-        Main.getRecoveryHandler().onReady(e);
+        Main.getMembersRecoveryHandler().onReady(e);
     }
 
     @Override

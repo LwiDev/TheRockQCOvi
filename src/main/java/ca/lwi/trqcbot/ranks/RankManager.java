@@ -10,7 +10,6 @@ import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.*;
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.AudioChannel;
-import net.dv8tion.jda.api.events.guild.member.GuildMemberJoinEvent;
 import net.dv8tion.jda.api.events.guild.voice.GuildVoiceUpdateEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
@@ -24,7 +23,6 @@ import java.util.concurrent.TimeUnit;
 
 public class RankManager extends ListenerAdapter {
 
-    private static RankManager instance;
     private final MongoCollection<Document> userCollection;
     private final String guildId;
     private final String recrueRoleId;
@@ -37,7 +35,6 @@ public class RankManager extends ListenerAdapter {
     private final ScheduledExecutorService scheduler;
 
     public RankManager() {
-        // Chargement des variables d'environnement avec dotenv
         Dotenv dotenv = Dotenv.load();
         this.guildId = dotenv.get("GUILD_ID");
         this.recrueRoleId = dotenv.get("RECRUE_ROLE_ID");
@@ -71,41 +68,6 @@ public class RankManager extends ListenerAdapter {
                 Thread.currentThread().interrupt();
             }
         }
-    }
-    
-    @Override
-    public void onGuildMemberJoin(@NotNull GuildMemberJoinEvent e) {
-        Guild guild = e.getGuild();
-        Member member = e.getMember();
-        Document existingUser = userCollection.find(new Document("userId", member.getId())).first();
-        if (existingUser != null) return;
-
-        Document reputationDoc = new Document("reputationScore", 0)
-                .append("messagesCount", 0)
-                .append("dailyMessagesCount", 0)
-                .append("avgDailyMessages", 0)
-                .append("activeDaysCount", 0)
-                .append("responsesCount", 0)
-                .append("tagsCount", 0)
-                .append("totalVoiceMinutes", 0)
-                .append("dailyVoiceMinutes", 0)
-                .append("voiceDaysActive", 0);
-
-        Document userDoc = new Document("userId", member.getId())
-                .append("username", member.getUser().getName())
-                .append("joinDate", new Date(System.currentTimeMillis()))
-                .append("currentRank", "Recrue")
-                .append("reputation", reputationDoc);
-        userCollection.insertOne(userDoc);
-
-        Role recrueRole = guild.getRoleById(recrueRoleId);
-        if (recrueRole != null) {
-            guild.addRoleToMember(UserSnowflake.fromId(member.getId()), recrueRole).queue();
-        } else {
-            System.out.println("recrueRole is null");
-        }
-
-        Main.getDraftMessageHandler().createMessage(e.getGuild(), e.getMember());
     }
     
     @Override

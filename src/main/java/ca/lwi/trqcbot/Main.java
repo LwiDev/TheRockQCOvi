@@ -1,11 +1,14 @@
 package ca.lwi.trqcbot;
 
 import ca.lwi.trqcbot.commands.manager.CommandsManager;
+import ca.lwi.trqcbot.contracts.ContractManager;
 import ca.lwi.trqcbot.donations.DonationsManager;
 import ca.lwi.trqcbot.draft.DraftMessageHandler;
+import ca.lwi.trqcbot.listeners.GuildMemberJoinListeners;
 import ca.lwi.trqcbot.mongo.MongoConnection;
 import ca.lwi.trqcbot.mongo.MongoCredentials;
 import ca.lwi.trqcbot.ranks.RankManager;
+import ca.lwi.trqcbot.recovery.ContractRecoveryHandler;
 import ca.lwi.trqcbot.recovery.MemberRecoveryHandler;
 import ca.lwi.trqcbot.ressources.ResourcesManager;
 import ca.lwi.trqcbot.teams.TeamManager;
@@ -45,7 +48,11 @@ public class Main {
     @Getter
     private static DraftMessageHandler draftMessageHandler;
     @Getter
-    private static MemberRecoveryHandler recoveryHandler;
+    private static ContractManager contractManager;
+    @Getter
+    private static MemberRecoveryHandler membersRecoveryHandler;
+    @Getter
+    private static ContractRecoveryHandler contractsRecoveryHandler;
 
     public static void main(String[] args) throws IOException, FontFormatException {
         System.setProperty("log4j2.disable.jmx", "true");
@@ -69,7 +76,9 @@ public class Main {
         ticketsHandler = new TicketsHandler();
         draftMessageHandler = new DraftMessageHandler();
         YouTubeWatcher watcher = new YouTubeWatcher();
-        recoveryHandler = new MemberRecoveryHandler();
+        contractManager = new ContractManager();
+        membersRecoveryHandler = new MemberRecoveryHandler();
+        contractsRecoveryHandler = new ContractRecoveryHandler();
 
         jda = JDABuilder
                 .create(dotenv.get("DISC_TOKEN"), GatewayIntent.GUILD_MEMBERS, GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_VOICE_STATES)
@@ -78,7 +87,10 @@ public class Main {
                 .addEventListeners(donationsManager)
                 .addEventListeners(rankManager)
                 .addEventListeners(ticketsHandler)
-                .addEventListeners(recoveryHandler)
+                .addEventListeners(contractManager)
+                .addEventListeners(membersRecoveryHandler)
+                .addEventListeners(contractsRecoveryHandler)
+                .addEventListeners(new GuildMemberJoinListeners())
                 .addEventListeners(new CommandsManager())
                 .build();
 
@@ -92,7 +104,8 @@ public class Main {
             System.out.println("Arrêt du bot en cours...");
             if (rankManager != null) rankManager.shutdown();
             if (mongoConnection != null) mongoConnection.close();
-            if (recoveryHandler != null) recoveryHandler.shutdown();
+            if (membersRecoveryHandler != null) membersRecoveryHandler.shutdown();
+            if (contractsRecoveryHandler != null) contractsRecoveryHandler.shutdown();
             if (jda != null) jda.shutdown();
             System.out.println("Arrêt terminé.");
         }));

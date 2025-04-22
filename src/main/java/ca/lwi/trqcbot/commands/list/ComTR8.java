@@ -91,7 +91,7 @@ public class ComTR8 extends Command {
                         break;
                     case "recovery":
                         e.deferReply(true).queue();
-                        Main.getRecoveryHandler().forceRecovery(e);
+                        Main.getMembersRecoveryHandler().forceRecovery(e);
                         break;
                     default:
                         e.reply("Sous-commande inconnue.").setEphemeral(true).queue();
