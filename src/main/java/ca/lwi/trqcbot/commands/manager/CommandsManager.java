@@ -26,7 +26,7 @@ public class CommandsManager extends ListenerAdapter {
     public void registerCommands(){
         ComTeam teamCommand = new ComTeam();
 
-        registerCommand(new ComContract());
+//        registerCommand(new ComContract());
         registerCommand(new ComLeaderboard());
         registerCommand(new ComRank());
         registerCommand(new ComTicket());

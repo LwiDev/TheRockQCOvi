@@ -14,7 +14,6 @@ import ca.lwi.trqcbot.ressources.ResourcesManager;
 import ca.lwi.trqcbot.teams.TeamManager;
 import ca.lwi.trqcbot.tickets.TicketsHandler;
 import ca.lwi.trqcbot.utils.FontUtils;
-import ca.lwi.trqcbot.youtube.YouTubeWatcher;
 import io.github.cdimascio.dotenv.Dotenv;
 import lombok.Getter;
 import net.dv8tion.jda.api.JDA;
@@ -75,7 +74,7 @@ public class Main {
         teamManager = new TeamManager();
         ticketsHandler = new TicketsHandler();
         draftMessageHandler = new DraftMessageHandler();
-        YouTubeWatcher watcher = new YouTubeWatcher();
+//        YouTubeWatcher watcher = new YouTubeWatcher();
         contractManager = new ContractManager();
         membersRecoveryHandler = new MemberRecoveryHandler();
         contractsRecoveryHandler = new ContractRecoveryHandler();
@@ -95,7 +94,7 @@ public class Main {
                 .build();
 
         resourcesManager.registerEventListeners(jda);
-        watcher.start(jda);
+//        watcher.start(jda);
 
         Thread consoleThread = getThread();
         consoleThread.start();
