@@ -5,6 +5,7 @@ import ca.lwi.trqcbot.contracts.ContractManager;
 import ca.lwi.trqcbot.donations.DonationsManager;
 import ca.lwi.trqcbot.draft.DraftMessageHandler;
 import ca.lwi.trqcbot.listeners.GuildMemberJoinListeners;
+import ca.lwi.trqcbot.listeners.ReadyListeners;
 import ca.lwi.trqcbot.mongo.MongoConnection;
 import ca.lwi.trqcbot.mongo.MongoCredentials;
 import ca.lwi.trqcbot.ranks.RankManager;
@@ -52,6 +53,8 @@ public class Main {
     private static MemberRecoveryHandler membersRecoveryHandler;
     @Getter
     private static ContractRecoveryHandler contractsRecoveryHandler;
+    @Getter
+    private static CommandsManager commandsManager;
 
     public static void main(String[] args) throws IOException, FontFormatException {
         System.setProperty("log4j2.disable.jmx", "true");
@@ -78,6 +81,7 @@ public class Main {
         contractManager = new ContractManager();
         membersRecoveryHandler = new MemberRecoveryHandler();
         contractsRecoveryHandler = new ContractRecoveryHandler();
+        commandsManager = new CommandsManager();
 
         jda = JDABuilder
                 .create(dotenv.get("DISC_TOKEN"), GatewayIntent.GUILD_MEMBERS, GatewayIntent.GUILD_MESSAGES, GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_VOICE_STATES)
@@ -89,8 +93,9 @@ public class Main {
                 .addEventListeners(contractManager)
                 .addEventListeners(membersRecoveryHandler)
                 .addEventListeners(contractsRecoveryHandler)
+                .addEventListeners(commandsManager)
                 .addEventListeners(new GuildMemberJoinListeners())
-                .addEventListeners(new CommandsManager())
+                .addEventListeners(new ReadyListeners())
                 .build();
 
         resourcesManager.registerEventListeners(jda);

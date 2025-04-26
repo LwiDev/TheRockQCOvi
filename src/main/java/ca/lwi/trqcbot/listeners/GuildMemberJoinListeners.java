@@ -46,9 +46,9 @@ public class GuildMemberJoinListeners extends ListenerAdapter {
         Document userDoc = new Document("userId", member.getId())
                 .append("username", member.getUser().getName())
                 .append("joinDate", new Date(System.currentTimeMillis()))
-                .append("contractStatus", "signed")
                 .append("currentRank", "Recrue")
                 .append("reputation", reputationDoc);
+
         userCollection.insertOne(userDoc);
 
         Role recrueRole = guild.getRoleById(recrueRoleId);
@@ -59,5 +59,19 @@ public class GuildMemberJoinListeners extends ListenerAdapter {
         }
 
         Main.getDraftMessageHandler().createMessage(e.getGuild(), e.getMember());
+        Document contract = Main.getContractManager().generateEntryContract(member);
+        if (contract != null) {
+            String teamName = contract.getString("teamName");
+            double salary = contract.getInteger("salary") / 1000000.0;
+            e.getUser().openPrivateChannel().queue(channel -> {
+                channel.sendMessage("🎉 **Bienvenue sur le serveur Dans le Mix !**\n\n" +
+                        "Vous avez signé un contrat d'entrée avec les **" + teamName + "** " +
+                        "pour 3 ans à un salaire annuel de $" + String.format("%.3fM", salary) + ".\n\n" +
+                        "Ce contrat est à deux volets, ce qui signifie que vous pourriez être envoyé dans les ligues mineures.\n\n" +
+                        "Utilisez la commande `/rank` dans le serveur pour voir votre profil et `/contrat voir` " +
+                        "pour les détails de votre contrat.\n\n" +
+                        "Bonne chance pour votre carrière ! 🏒").queue();
+            });
+        }
     }
 }

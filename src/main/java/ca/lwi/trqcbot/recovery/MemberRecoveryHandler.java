@@ -7,7 +7,6 @@ import io.github.cdimascio.dotenv.Dotenv;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
-import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.bson.Document;
 import org.slf4j.Logger;
@@ -33,9 +32,8 @@ public class MemberRecoveryHandler extends ListenerAdapter {
         this.scheduler = Executors.newSingleThreadScheduledExecutor();
     }
 
-    public void onReady(ReadyEvent e) {
-        LOGGER.info("Bot en ligne, vérification des membres non enregistrés...");
-        Guild guild = e.getJDA().getGuildById(guildId);
+    public void init(Guild guild) {
+        LOGGER.info("Vérification des membres non enregistrés...");
         if (guild == null) {
             LOGGER.error("Guild non trouvée avec l'ID: {}", guildId);
             return;
