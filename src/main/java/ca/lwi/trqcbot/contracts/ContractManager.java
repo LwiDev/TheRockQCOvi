@@ -78,6 +78,8 @@ public class ContractManager extends ListenerAdapter {
                 "2 volets",              // contractType
                 false,                   // hasNTC
                 false,                   // hasNMC
+                "",
+                "",
                 joinDate                 // startDate - nouveau paramètre
         );
     }
@@ -85,8 +87,8 @@ public class ContractManager extends ListenerAdapter {
     /**
      * Surcharge de la méthode generateContract qui utilise la date actuelle comme date de début
      */
-    public Document generateContract(String userId, String teamName, int salary, int years, String contractType, boolean hasNTC, boolean hasNMC) {
-        return generateContract(userId, teamName, salary, years, contractType, hasNTC, hasNMC, null);
+    public Document generateContract(String userId, String teamName, int salary, int years, String contractType, boolean hasNTC, boolean hasNMC, String ntcDetails, String nmcDetails) {
+        return generateContract(userId, teamName, salary, years, contractType, hasNTC, hasNMC, ntcDetails, nmcDetails, null);
     }
 
     /**
@@ -101,7 +103,7 @@ public class ContractManager extends ListenerAdapter {
      * @param hasNMC Si le contrat a une clause de non-mouvement
      * @return Document représentant le contrat
      */
-    public Document generateContract(String userId, String teamName, int salary, int years, String contractType, boolean hasNTC, boolean hasNMC, Date startDate) {
+    public Document generateContract(String userId, String teamName, int salary, int years, String contractType, boolean hasNTC, boolean hasNMC, String ntcDetails, String nmcDetails, Date startDate) {
         int adjustedYears = Math.max(1, Math.min(years, MAX_CONTRACT_YEARS));
         int adjustedSalary = Math.max(MIN_SALARY, Math.min(salary, MAX_SALARY));
         Date contractStartDate = startDate != null ? startDate : new Date();
@@ -123,6 +125,8 @@ public class ContractManager extends ListenerAdapter {
                 .append("type", contractType)
                 .append("hasNTC", hasNTC)
                 .append("hasNMC", hasNMC)
+                .append("ntcDetails", ntcDetails)
+                .append("nmcDetails", nmcDetails)
                 .append("status", "active");
 
         updateUserContract(userId, contract);
@@ -148,8 +152,14 @@ public class ContractManager extends ListenerAdapter {
         if (contract.containsKey("hasNTC")) {
             contractInfo.append("hasNTC", contract.getBoolean("hasNTC"));
         }
+        if (contract.containsKey("ntcDetails")) {
+            contractInfo.append("ntcDetails", contract.getString("ntcDetails"));
+        }
         if (contract.containsKey("hasNMC")) {
             contractInfo.append("hasNMC", contract.getBoolean("hasNMC"));
+        }
+        if (contract.containsKey("nmcDetails")) {
+            contractInfo.append("nmcDetails", contract.getString("nmcDetails"));
         }
 
         Main.getMongoConnection().getDatabase().getCollection("users").updateOne(
@@ -161,13 +171,7 @@ public class ContractManager extends ListenerAdapter {
     /**
      * Vérifie les contrats qui expirent et envoie des notifications.
      */
-    private void checkExpiringContracts() {
-        Date now = new Date();
-
-//                    Document activeContract = userData.get("contract", Document.class);
-//            if (activeContract != null && activeContract.getString("status").equals("active")) {
-
-        // Trouver tous les contrats actifs qui expirent aujourd'hui
+    public void checkExpiringContracts() {
         Document query = new Document("contract.status", "active").append("contract.expiryDate", new Document("$lte", new Date()));
         for (Document user : Main.getMongoConnection().getDatabase().getCollection("users").find(query)) {
             String userId = user.getString("userId");
@@ -200,7 +204,7 @@ public class ContractManager extends ListenerAdapter {
             String currentTeam = userData.getString("teamName");
 
             // Obtenir deux équipes aléatoires (différentes de l'équipe actuelle)
-            List<Document> randomTeams = getRandomTeams(2, Collections.singletonList(currentTeam));
+            List<Document> randomTeams = getRandomTeams(Collections.singletonList(currentTeam));
 
             // Récupérer l'équipe actuelle depuis la DB
             Document currentTeamData = Main.getTeamManager().getTeamByName(currentTeam);
@@ -242,9 +246,8 @@ public class ContractManager extends ListenerAdapter {
                 channel.sendMessage("📬 Vous pouvez signer un nouveau contrat !")
                         .addFiles(FileUpload.fromData(outputStream.toByteArray(), "contract_offers.png"))
                         .addActionRow(buttons.subList(0, Math.min(buttons.size() - 1, 3)).toArray(new Button[0]))
-                        .addActionRow(buttons.get(buttons.size() - 1))
+                        .addActionRow(buttons.getLast())
                         .queue();
-
                 channel.sendMessage("⏳ Vous avez 3 jours pour signer un contrat. Passé ce délai, les offres seront retirées " +
                                 "et de nouvelles propositions moins avantageuses vous seront faites.")
                         .queue();
@@ -268,7 +271,6 @@ public class ContractManager extends ListenerAdapter {
      */
     private ContractOffer createOfferForTeam(Document team, int reputationScore, boolean isCurrentTeam) {
         String teamName = team.getString("name");
-        String seasonRecord = generateRandomSeasonRecord();
 
         // Déterminer la durée du contrat (entre 1 et 8 ans, plus de chance d'avoir un contrat plus long avec une bonne réputation)
         int maxYears = Math.max(1, Math.min(8, (reputationScore / 20) + 1));
@@ -279,9 +281,7 @@ public class ContractManager extends ListenerAdapter {
         double baseSalary = 1.0 + (reputationScore / 10.0);
 
         // L'équipe actuelle offre généralement un peu plus (loyauté)
-        if (isCurrentTeam) {
-            baseSalary *= 1.1;
-        }
+        if (isCurrentTeam) baseSalary *= 1.1;
 
         // Ajout d'une variation aléatoire (±10%)
         double randomFactor = 0.9 + (new Random().nextDouble() * 0.2);
@@ -293,9 +293,6 @@ public class ContractManager extends ListenerAdapter {
         // Arrondir à 2 décimales
         salary = Math.round(salary * 100.0) / 100.0;
 
-        // Entre 1 et 15 numéros de chandail disponibles
-        int jerseyNumbers = new Random().nextInt(15) + 1;
-
         // Le type de contrat dépend de la réputation
         String contractType;
         if (reputationScore <= TWO_WAY_REPUTATION_THRESHOLD) {
@@ -304,23 +301,105 @@ public class ContractManager extends ListenerAdapter {
             contractType = "1 volet";
         }
 
-        // Déterminer si l'offre inclut des clauses spéciales en fonction de la réputation
-        boolean hasNTC = reputationScore > 40 && new Random().nextDouble() < 0.4;
-        boolean hasNMC = reputationScore > 60 && new Random().nextDouble() < 0.2;
+        // Variables pour suivre les clauses et leurs détails
+        boolean hasNTC = false;
+        boolean hasNMC = false;
+        String ntcDetails = "";
+        String nmcDetails = "";
 
-        return new ContractOffer(teamName, years, salary, contractType, jerseyNumbers, hasNTC, hasNMC);
-    }
+        // Implémenter les clauses en fonction de la réputation
+        Random random = new Random();
 
-    /**
-     * Génère un bilan de saison aléatoire pour une équipe.
-     * @return Une chaîne au format "W-L-OT"
-     */
-    private String generateRandomSeasonRecord() {
-        int wins = new Random().nextInt(35) + 30; // Entre 30 et 64 victoires
-        int losses = new Random().nextInt(30) + 10; // Entre 10 et 39 défaites
-        int overtime = new Random().nextInt(10); // Entre 0 et 9 défaites en prolongation
+        // Moins de 20 = aucune clause possible
+        // 20 à 40 : clause possible, mais faible
+        if (reputationScore >= 20 && reputationScore < 40) {
+            // Petite chance d'avoir une NTC limitée
+            if (random.nextDouble() < 0.25) {
+                hasNTC = true;
+                int listSize = random.nextInt(5) + 3; // Liste de 3 à 7 équipes
+                boolean isAcceptList = random.nextBoolean();
+                ntcDetails = "Liste de " + listSize + " équipes " + (isAcceptList ? "acceptées" : "refusées");
+            }
+        }
+        // 40 à 60 : plus probable, plus d'équipes
+        else if (reputationScore < 60) {
+            // Chance modérée d'avoir une NTC
+            if (random.nextDouble() < 0.4) {
+                hasNTC = true;
+                int listSize = random.nextInt(10) + 5; // Liste de 5 à 14 équipes
+                boolean isAcceptList = random.nextBoolean();
+                ntcDetails = "Liste de " + listSize + " équipes " + (isAcceptList ? "acceptées" : "refusées");
+            }
 
-        return wins + "-" + losses + "-" + overtime;
+            // Très petite chance d'avoir une NMC modifiée
+            if (random.nextDouble() < 0.15) {
+                hasNMC = true;
+                int activeYear = Math.min(years - 1, random.nextInt(3) + 2); // Active après 2-4 ans
+                nmcDetails = "Active à partir de la " + activeYear + "e année";
+            }
+        }
+        // 60 à 80 : presque la meilleure
+        else if (reputationScore < 80) {
+            // Forte chance d'avoir une NTC
+            if (random.nextDouble() < 0.65) {
+                hasNTC = true;
+                double ntcType = random.nextDouble();
+
+                if (ntcType < 0.5) {
+                    // NTC complète
+                    ntcDetails = "Protection complète contre les échanges";
+                } else {
+                    // NTC modifiée avec liste plus longue
+                    int listSize = random.nextInt(10) + 10; // Liste de 10 à 19 équipes
+                    boolean isAcceptList = random.nextBoolean();
+                    ntcDetails = "Liste de " + listSize + " équipes " +
+                            (isAcceptList ? "acceptées" : "refusées");
+                }
+            }
+
+            // Chance moyenne d'avoir une NMC
+            if (random.nextDouble() < 0.35) {
+                hasNMC = true;
+                if (random.nextDouble() < 0.6) {
+                    int activeYear = Math.min(years - 1, random.nextInt(2) + 1); // Active après 1-2 ans
+                    nmcDetails = "Active à partir de la " + activeYear + "e année";
+                } else {
+                    nmcDetails = "Protection contre le ballottage et la rétrogradation";
+                }
+            }
+        }
+        // 80 à 95 : quasiment assurée d'avoir une clause complète
+        else if (reputationScore < 95) {
+            // Très forte chance d'avoir une NTC complète
+            if (random.nextDouble() < 0.9) {
+                hasNTC = true;
+                ntcDetails = "Protection complète";
+            }
+
+            // Bonne chance d'avoir une NMC
+            if (random.nextDouble() < 0.5) {
+                hasNMC = true;
+                nmcDetails = "Protection complète";
+            }
+        }
+        // 95 à 100 : complète, NTC + NMC garantis
+        else {
+            // NTC et NMC garantis
+            hasNTC = true;
+            hasNMC = true;
+            ntcDetails = "Protection complète";
+            nmcDetails = "Protection complète";
+        }
+
+        // L'équipe actuelle offre plus facilement des clauses (fidélité)
+        if (isCurrentTeam && !hasNTC && reputationScore >= 30 && random.nextDouble() < 0.3) {
+            hasNTC = true;
+            int listSize = random.nextInt(8) + 5; // Liste de 5 à 12 équipes
+            boolean isAcceptList = random.nextBoolean();
+            ntcDetails = "Liste de " + listSize + " équipes " + (isAcceptList ? "acceptées" : "refusées");
+        }
+
+        return new ContractOffer(teamName, years, salary, contractType, hasNTC, hasNMC, ntcDetails, nmcDetails);
     }
 
     /**
@@ -329,9 +408,10 @@ public class ContractManager extends ListenerAdapter {
      * @return Une image BufferedImage des offres
      */
     private BufferedImage generateContractOffersImage(List<ContractOffer> offers) throws IOException {
-        int width = 900;
-        int height = 450; // Augmenté pour accommoder les clauses NTC/NMC
-        int panelWidth = width / 3;
+        int width = 1200;
+        int height = 600; // Hauteur réduite pour éliminer l'espace vide en bas
+        int panelWidth = width / offers.size();
+        int padding = 15;
 
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = image.createGraphics();
@@ -341,13 +421,18 @@ public class ContractManager extends ListenerAdapter {
         g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
         // Fond noir pour l'image globale
-        g2d.setColor(Color.BLACK);
+        g2d.setColor(new Color(5, 5, 5));
         g2d.fillRect(0, 0, width, height);
 
         // Dessiner chaque offre
         for (int i = 0; i < offers.size(); i++) {
             ContractOffer offer = offers.get(i);
-            int x = i * panelWidth;
+            int x = i * panelWidth + padding;
+            int panelContentWidth = panelWidth - (2 * padding);
+
+            // Bordure du panneau plus foncée
+            g2d.setColor(new Color(15, 15, 15));
+            g2d.fillRect(x, padding, panelContentWidth, height - (2 * padding));
 
             // Zone du haut avec la couleur de l'équipe et logo
             Document teamData = Main.getTeamManager().getTeamByName(offer.teamName());
@@ -359,75 +444,156 @@ public class ContractManager extends ListenerAdapter {
                 }
             }
 
-            // Fond de couleur de l'équipe pour la partie supérieure
+            // Ajout du watermark de l'équipe en arrière-plan (logo transparent)
+            try {
+                if (teamData != null && teamData.containsKey("logo")) {
+                    String logoPath = teamData.getString("logo");
+                    if (logoPath != null && !logoPath.isEmpty()) {
+                        BufferedImage watermarkLogo = ImageUtils.loadImage(logoPath, 300);
+
+                        // Dessiner le watermark avec transparence
+                        AlphaComposite alphaChannel = AlphaComposite.getInstance(
+                                AlphaComposite.SRC_OVER, 0.08f);
+                        Composite originalComposite = g2d.getComposite();
+                        g2d.setComposite(alphaChannel);
+
+                        int watermarkY = (height - padding) / 2;
+                        g2d.drawImage(watermarkLogo,
+                                x + (panelContentWidth - 300) / 2,
+                                watermarkY - 100,
+                                300, 300, null);
+
+                        g2d.setComposite(originalComposite);
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Erreur lors du chargement du watermark: " + e.getMessage());
+            }
+
+            // Zone rectangulaire en haut pour l'équipe
             g2d.setColor(teamColor);
-            g2d.fillRect(x, 0, panelWidth, 150);
+            g2d.fillRect(x, padding, panelContentWidth, 180);
 
             // Essayer de charger et afficher le logo de l'équipe
             try {
                 if (teamData != null && teamData.containsKey("logo")) {
                     String logoPath = teamData.getString("logo");
                     if (logoPath != null && !logoPath.isEmpty()) {
-                        BufferedImage logo = ImageUtils.loadImage(logoPath, 80);
-                        g2d.drawImage(logo, x + (panelWidth - 80) / 2, 35, 80, 80, null);
+                        BufferedImage logo = ImageUtils.loadImage(logoPath, 120);
+                        g2d.drawImage(logo, x + (panelContentWidth - 120) / 2, padding + 25, 120, 120, null);
                     }
                 }
             } catch (Exception e) {
                 System.err.println("Erreur lors du chargement du logo de l'équipe: " + e.getMessage());
             }
 
-            // Nom de l'équipe et record
+            // Nom de l'équipe avec plus d'espace après le logo
             g2d.setColor(Color.WHITE);
-            g2d.setFont(new Font("Arial", Font.BOLD, 16));
+            g2d.setFont(new Font("Arial", Font.BOLD, 18));
             String teamName = offer.teamName();
             FontMetrics fm = g2d.getFontMetrics();
             int textWidth = fm.stringWidth(teamName);
-            g2d.drawString(teamName, x + (panelWidth - textWidth) / 2, 170);
+            g2d.drawString(teamName, x + (panelContentWidth - textWidth) / 2, padding + 180 + 25);
 
-            // Texte "CONTRACT OFFER"
-            g2d.setColor(Color.GRAY);
-            g2d.setFont(new Font("Arial", Font.BOLD, 14));
-            String contractText = "OFFRE DE CONTRAT";
-            textWidth = g2d.getFontMetrics().stringWidth(contractText);
-            g2d.drawString(contractText, x + (panelWidth - textWidth) / 2, 200);
+            // Ligne de séparation
+            g2d.setColor(new Color(40, 40, 40));
+            g2d.fillRect(x + 30, padding + 220, panelContentWidth - 60, 1);
 
             // Détails du contrat
-            g2d.setColor(Color.WHITE);
-            g2d.setFont(new Font("Arial", Font.PLAIN, 12));
+            int detailsBaseY = padding + 260;
+            int rowHeight = 45; // Espacement réduit entre les lignes
+            int labelX = x + 30;
+            int valueX = x + panelContentWidth - 30;
 
             // Years
-            g2d.drawString("Années :", x + 50, 250);
-            g2d.setFont(new Font("Arial", Font.BOLD, 12));
-            g2d.drawString(String.valueOf(offer.years()), x + panelWidth - 80, 250);
+            g2d.setColor(new Color(180, 180, 180));
+            g2d.setFont(new Font("Arial", Font.PLAIN, 18));
+            g2d.drawString("Années:", labelX, detailsBaseY);
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("Arial", Font.BOLD, 20));
+            String yearsText = String.valueOf(offer.years());
+            fm = g2d.getFontMetrics();
+            textWidth = fm.stringWidth(yearsText);
+            g2d.drawString(yearsText, valueX - textWidth, detailsBaseY);
 
             // Yearly salary
-            g2d.setFont(new Font("Arial", Font.PLAIN, 12));
-            g2d.drawString("Salaire annuel :", x + 50, 270);
-            g2d.setFont(new Font("Arial", Font.BOLD, 12));
-            g2d.drawString("$" + String.format("%.2fM", offer.salary()), x + panelWidth - 80, 270);
+            g2d.setColor(new Color(180, 180, 180));
+            g2d.setFont(new Font("Arial", Font.PLAIN, 18));
+            g2d.drawString("Salaire annuel:", labelX, detailsBaseY + rowHeight);
+            g2d.setColor(new Color(100, 255, 100)); // Vert pour l'argent
+            g2d.setFont(new Font("Arial", Font.BOLD, 20));
+            String salaryText = "$" + String.format("%.2fM", offer.salary());
+            fm = g2d.getFontMetrics();
+            textWidth = fm.stringWidth(salaryText);
+            g2d.drawString(salaryText, valueX - textWidth, detailsBaseY + rowHeight);
 
             // Contract type
-            g2d.setFont(new Font("Arial", Font.PLAIN, 12));
-            g2d.drawString("Type de contrat :", x + 50, 290);
-            g2d.setFont(new Font("Arial", Font.BOLD, 12));
-            g2d.drawString(offer.contractType(), x + panelWidth - 80, 290);
+            g2d.setColor(new Color(180, 180, 180));
+            g2d.setFont(new Font("Arial", Font.PLAIN, 18));
+            g2d.drawString("Type de contrat:", labelX, detailsBaseY + 2 * rowHeight);
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("Arial", Font.BOLD, 20));
+            String contractTypeText = offer.contractType();
+            fm = g2d.getFontMetrics();
+            textWidth = fm.stringWidth(contractTypeText);
+            g2d.drawString(contractTypeText, valueX - textWidth, detailsBaseY + 2 * rowHeight);
 
-            // Number of jerseys
-            g2d.setFont(new Font("Arial", Font.PLAIN, 12));
-            g2d.drawString("Nombre de 0 :", x + 50, 310);
-            g2d.setFont(new Font("Arial", Font.BOLD, 12));
-            g2d.drawString(String.valueOf(offer.jerseyNumbers()), x + panelWidth - 80, 310);
+            // Clauses spéciales - Nouveau format comme demandé
+            g2d.setColor(new Color(180, 180, 180));
+            g2d.setFont(new Font("Arial", Font.PLAIN, 18));
+            g2d.drawString("Clauses:", labelX, detailsBaseY + 3 * rowHeight);
 
-            // Clauses spéciales
-            g2d.setFont(new Font("Arial", Font.PLAIN, 12));
-            g2d.drawString("Clauses :", x + 50, 330);
-            g2d.setFont(new Font("Arial", Font.BOLD, 12));
-            StringBuilder clauses = new StringBuilder();
-            if (offer.hasNTC()) clauses.append("NTC ");
-            if (offer.hasNMC()) clauses.append("NMC");
-            if (clauses.length() == 0) clauses.append("Aucune");
-            g2d.drawString(clauses.toString(), x + panelWidth - 80, 330);
+            int clauseBaseY = detailsBaseY + 3 * rowHeight + 30; // Marge après "Clauses:"
+            int clauseIndent = 20; // Indentation pour les éléments de la liste
+            int clauseSpacing = 25; // Espace entre les clauses
+
+            if (!offer.hasNTC() && !offer.hasNMC()) {
+                g2d.setColor(Color.WHITE);
+                g2d.setFont(new Font("Arial", Font.BOLD, 16));
+                g2d.drawString("Aucune", labelX + clauseIndent, clauseBaseY);
+            } else {
+                int currentY = clauseBaseY;
+
+                if (offer.hasNTC()) {
+                    // Format "- NTC : détails"
+                    g2d.setColor(Color.WHITE);
+                    g2d.setFont(new Font("Arial", Font.PLAIN, 16));
+                    g2d.drawString("-", labelX, currentY);
+
+                    g2d.setColor(new Color(255, 180, 50)); // Orange pour NTC
+                    g2d.setFont(new Font("Arial", Font.BOLD, 16));
+                    g2d.drawString("NTC", labelX + clauseIndent, currentY);
+
+                    // Détails NTC à la suite
+                    g2d.setColor(new Color(200, 200, 200));
+                    g2d.setFont(new Font("Arial", Font.ITALIC, 14));
+                    g2d.drawString(": " + offer.ntcDetails(), labelX + clauseIndent + 45, currentY);
+
+                    currentY += clauseSpacing;
+                }
+
+                if (offer.hasNMC()) {
+                    // Format "- NMC : détails"
+                    g2d.setColor(Color.WHITE);
+                    g2d.setFont(new Font("Arial", Font.PLAIN, 16));
+                    g2d.drawString("-", labelX, currentY);
+
+                    g2d.setColor(new Color(50, 180, 255)); // Bleu pour NMC
+                    g2d.setFont(new Font("Arial", Font.BOLD, 16));
+                    g2d.drawString("NMC", labelX + clauseIndent, currentY);
+
+                    // Détails NMC à la suite
+                    g2d.setColor(new Color(200, 200, 200));
+                    g2d.setFont(new Font("Arial", Font.ITALIC, 14));
+                    g2d.drawString(": " + offer.nmcDetails(), labelX + clauseIndent + 45, currentY);
+                }
+            }
         }
+
+        // Bordure externe
+        g2d.setColor(new Color(40, 40, 40));
+        g2d.setStroke(new BasicStroke(2.0f));
+        g2d.drawRect(0, 0, width - 1, height - 1);
 
         g2d.dispose();
         return image;
@@ -446,9 +612,10 @@ public class ContractManager extends ListenerAdapter {
                         .append("years", offer.years())
                         .append("salary", offer.salary())
                         .append("contractType", offer.contractType())
-                        .append("jerseyNumbers", offer.jerseyNumbers())
                         .append("hasNTC", offer.hasNTC())
-                        .append("hasNMC", offer.hasNMC()))
+                        .append("hasNMC", offer.hasNMC())
+                        .append("ntcDetails", offer.ntcDetails())
+                        .append("nmcDetails", offer.nmcDetails()))
                 .collect(Collectors.toList());
 
         // Date d'expiration (3 jours)
@@ -571,6 +738,8 @@ public class ContractManager extends ListenerAdapter {
         String contractType = selectedOffer.getString("contractType");
         boolean hasNTC = selectedOffer.getBoolean("hasNTC", false);
         boolean hasNMC = selectedOffer.getBoolean("hasNMC", false);
+        String ntcDetails = selectedOffer.getString("ntcDetails") != null ? selectedOffer.getString("ntcDetails") : "";
+        String nmcDetails = selectedOffer.getString("nmcDetails") != null ? selectedOffer.getString("nmcDetails") : "";
 
         // Créer le contrat avec la fonction générique
         Document contract = generateContract(
@@ -580,7 +749,9 @@ public class ContractManager extends ListenerAdapter {
                 years,
                 contractType,
                 hasNTC,
-                hasNMC
+                hasNMC,
+                ntcDetails,
+                nmcDetails
         );
 
         // Marquer les offres comme acceptées
@@ -594,13 +765,20 @@ public class ContractManager extends ListenerAdapter {
 
         StringBuilder clausesText = new StringBuilder();
         if (hasNTC || hasNMC) {
-            clausesText.append(" avec les clauses: ");
-            if (hasNTC) clausesText.append("non-échange ");
-            if (hasNMC) clausesText.append("non-mouvement");
+            clausesText.append(" avec les clauses suivantes:\n");
+            if (hasNTC && hasNMC) {
+                clausesText.append("- NTC + NMC\n");
+                clausesText.append("  • NTC : ").append(ntcDetails).append("\n");
+                clausesText.append("  • NMC : ").append(nmcDetails);
+            } else if (hasNTC) {
+                clausesText.append("- NTC : ").append(ntcDetails);
+            } else {
+                clausesText.append("- NMC : ").append(nmcDetails);
+            }
         }
 
         event.reply("🎉 Félicitations ! Vous avez signé un contrat de " + years + " ans avec " + teamName +
-                " pour un salaire annuel de $" + String.format("%.2fM", salaryInMillions) + clausesText.toString() + "." +
+                " pour un salaire annuel de $" + String.format("%.2fM", salaryInMillions) + clausesText + "." +
                 "\nLe contrat expire le " + dateFormat.format(contract.getDate("expiryDate")) + ".").queue();
     }
 
@@ -619,57 +797,22 @@ public class ContractManager extends ListenerAdapter {
     }
 
     /**
-     * Met à jour l'équipe d'un membre Discord dans la base de données.
-     * @param member Membre Discord
-     * @param teamName Nom de l'équipe
-     */
-    private void updateUserTeam(Member member, String teamName) {
-        updateUserTeam(member.getId(), teamName);
-    }
-
-    /**
-     * Obtient une équipe aléatoire de la base de données.
-     * @return Document de l'équipe
-     */
-    private Document getRandomTeam() {
-        List<Document> teams = new ArrayList<>();
-        Main.getMongoConnection().getDatabase().getCollection("teams").find().into(teams);
-
-        if (teams.isEmpty()) {
-            return null;
-        }
-
-        return teams.get(new Random().nextInt(teams.size()));
-    }
-
-    /**
      * Obtient plusieurs équipes aléatoires, en excluant certaines.
-     * @param count Nombre d'équipes à obtenir
+     *
      * @param exclude Liste des noms d'équipes à exclure
      * @return Liste de documents d'équipes
      */
-    private List<Document> getRandomTeams(int count, List<String> exclude) {
+    private List<Document> getRandomTeams(List<String> exclude) {
         List<Document> allTeams = new ArrayList<>();
         Main.getMongoConnection().getDatabase().getCollection("teams").find().into(allTeams);
-
-        // Filtrer les équipes exclues
-        List<Document> availableTeams = allTeams.stream()
-                .filter(team -> !exclude.contains(team.getString("name")))
-                .collect(Collectors.toList());
-
-        if (availableTeams.size() <= count) {
-            return availableTeams;
-        }
-
-        // Sélectionner aléatoirement "count" équipes
+        List<Document> availableTeams = allTeams.stream().filter(team -> !exclude.contains(team.getString("name"))).collect(Collectors.toList());
+        if (availableTeams.size() <= 2) return availableTeams;
         List<Document> selectedTeams = new ArrayList<>();
         Random random = new Random();
-
-        while (selectedTeams.size() < count && !availableTeams.isEmpty()) {
+        while (selectedTeams.size() < 2 && !availableTeams.isEmpty()) {
             int index = random.nextInt(availableTeams.size());
             selectedTeams.add(availableTeams.remove(index));
         }
-
         return selectedTeams;
     }
 
@@ -679,9 +822,10 @@ public class ContractManager extends ListenerAdapter {
      * @param years Durée du contrat en années
      * @param salary Salaire annuel en millions
      * @param contractType Type de contrat (1 volet/2 volets)
-     * @param jerseyNumbers Nombre de chandails disponibles
      * @param hasNTC Contrat avec clause de non-échange
      * @param hasNMC Contrat avec clause de non-mouvement
+     * @param ntcDetails Détails de la clause de non-échange
+     * @param nmcDetails Détails de la clause de non-mouvement
      */
-    public record ContractOffer(String teamName, int years, double salary, String contractType, int jerseyNumbers, boolean hasNTC, boolean hasNMC) {}
+    public record ContractOffer(String teamName, int years, double salary, String contractType, boolean hasNTC, boolean hasNMC, String ntcDetails, String nmcDetails) {}
 }
