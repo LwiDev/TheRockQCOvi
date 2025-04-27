@@ -1,7 +1,7 @@
 package ca.lwi.trqcbot;
 
 import ca.lwi.trqcbot.commands.manager.CommandsManager;
-import ca.lwi.trqcbot.contracts.ContractManager;
+import ca.lwi.trqcbot.contracts.ContractsManager;
 import ca.lwi.trqcbot.donations.DonationsManager;
 import ca.lwi.trqcbot.draft.DraftMessageHandler;
 import ca.lwi.trqcbot.listeners.GuildMemberJoinListeners;
@@ -48,7 +48,7 @@ public class Main {
     @Getter
     private static DraftMessageHandler draftMessageHandler;
     @Getter
-    private static ContractManager contractManager;
+    private static ContractsManager contractsManager;
     @Getter
     private static MemberRecoveryHandler membersRecoveryHandler;
     @Getter
@@ -78,7 +78,7 @@ public class Main {
         ticketsHandler = new TicketsHandler();
         draftMessageHandler = new DraftMessageHandler();
 //        YouTubeWatcher watcher = new YouTubeWatcher();
-        contractManager = new ContractManager();
+        contractsManager = new ContractsManager();
         membersRecoveryHandler = new MemberRecoveryHandler();
         contractsRecoveryHandler = new ContractRecoveryHandler();
         commandsManager = new CommandsManager();
@@ -90,9 +90,8 @@ public class Main {
                 .addEventListeners(donationsManager)
                 .addEventListeners(rankManager)
                 .addEventListeners(ticketsHandler)
-                .addEventListeners(contractManager)
+                .addEventListeners(contractsManager)
                 .addEventListeners(membersRecoveryHandler)
-                .addEventListeners(contractsRecoveryHandler)
                 .addEventListeners(commandsManager)
                 .addEventListeners(new GuildMemberJoinListeners())
                 .addEventListeners(new ReadyListeners())

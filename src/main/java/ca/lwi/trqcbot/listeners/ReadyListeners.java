@@ -29,7 +29,7 @@ public class ReadyListeners extends ListenerAdapter {
         e.getJDA().updateCommands().addCommands(Main.getCommandsManager().getCommands().stream().filter(command -> !command.isGuildCommand()).collect(Collectors.toList())).queue();
         Main.getMembersRecoveryHandler().init(guild);
         Main.getContractsRecoveryHandler().init(guild);
-        Main.getContractManager().checkExpiringContracts();
+        Main.getContractsManager().checkExpiringContracts();
     }
 
 }

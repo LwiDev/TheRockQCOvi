@@ -1,13 +1,12 @@
 package ca.lwi.trqcbot.recovery;
 
 import ca.lwi.trqcbot.Main;
-import ca.lwi.trqcbot.contracts.ContractManager;
+import ca.lwi.trqcbot.contracts.ContractsManager;
 import io.github.cdimascio.dotenv.Dotenv;
 import lombok.Getter;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
-import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,22 +17,22 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public class ContractRecoveryHandler extends ListenerAdapter {
+public class ContractRecoveryHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ContractRecoveryHandler.class);
     private final String guildId;
     @Getter
     private final ScheduledExecutorService scheduler;
-    private final ContractManager contractManager;
+    private final ContractsManager contractsManager;
 
     public ContractRecoveryHandler() {
         this.guildId = Dotenv.load().get("GUILD_ID");
         this.scheduler = Executors.newSingleThreadScheduledExecutor();
-        this.contractManager = Main.getContractManager();
+        this.contractsManager = Main.getContractsManager();
     }
 
     public void init(Guild guild) {
-        LOGGER.info("Vérification des membres sans contrats...");
+        LOGGER.info("Vérification des membres sans contrat...");
         if (guild == null) {
             LOGGER.error("Guild non trouvée avec l'ID: {}", guildId);
             return;
@@ -42,24 +41,19 @@ public class ContractRecoveryHandler extends ListenerAdapter {
     }
 
     private void recoverMembersWithoutContracts(Guild guild) {
-        LOGGER.info("Recherche des membres sans contrats dans la base de données...");
-
+        LOGGER.info("Recherche des membres sans contrat dans la base de données...");
         // Récupérer tous les membres du serveur
         guild.loadMembers().onSuccess(members -> {
             List<Member> membersWithoutContracts = new ArrayList<>();
 
             for (Member member : members) {
                 if (member.getUser().isBot()) continue;
-
-                // Vérifier si l'utilisateur a un contrat actif
                 Document userData = Main.getRankManager().getUserData(member.getId());
                 boolean hasActiveContract = false;
-
                 if (userData != null && userData.containsKey("contract")) {
                     Document contract = (Document) userData.get("contract");
-                    hasActiveContract = contract != null && contract.getBoolean("active", false);
+                    hasActiveContract = contract != null && "active".equals(contract.getString("status"));
                 }
-
                 if (!hasActiveContract) {
                     membersWithoutContracts.add(member);
                     LOGGER.info("Membre sans contrat trouvé: {} ({})", member.getEffectiveName(), member.getId());
@@ -82,13 +76,21 @@ public class ContractRecoveryHandler extends ListenerAdapter {
         }
         Member member = members.get(index);
         try {
-            LOGGER.info("Création d'un contrat d'entrée pour: {}", member.getEffectiveName());
-            createEntryContractWithJoinDate(member);
+            Document userData = Main.getRankManager().getUserData(member.getId());
+            boolean hasActiveContract = false;
+            if (userData != null && userData.containsKey("contract")) {
+                Document contract = (Document) userData.get("contract");
+                hasActiveContract = contract != null && "active".equals(contract.getString("status"));
+            }
+            if (!hasActiveContract) {
+                LOGGER.info("Création d'un contrat d'entrée pour: {}", member.getEffectiveName());
+                createEntryContractWithJoinDate(member);
+            } else {
+                LOGGER.info("L'utilisateur {} a déjà un contrat actif - aucun contrat créé", member.getEffectiveName());
+            }
         } catch (Exception e) {
             LOGGER.error("Erreur lors de la création du contrat pour {}: {}", member.getEffectiveName(), e.getMessage(), e);
         }
-
-        // Traiter le prochain membre après un délai pour éviter la surcharge
         scheduler.schedule(() -> processMembersWithoutContractsWithDelay(members, index + 1), 2, TimeUnit.SECONDS);
     }
 
@@ -97,7 +99,7 @@ public class ContractRecoveryHandler extends ListenerAdapter {
      * @param member Le membre pour lequel créer un contrat
      */
     private void createEntryContractWithJoinDate(Member member) {
-        Document contract = contractManager.generateEntryContract(member);
+        Document contract = contractsManager.generateEntryContract(member);
         if (contract == null) {
             LOGGER.error("Échec de la création du contrat d'entrée pour: {}", member.getEffectiveName());
             return;

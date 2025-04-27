@@ -2,7 +2,7 @@ package ca.lwi.trqcbot.commands.list;
 
 import ca.lwi.trqcbot.Main;
 import ca.lwi.trqcbot.commands.Command;
-import ca.lwi.trqcbot.contracts.ContractManager;
+import ca.lwi.trqcbot.contracts.ContractsManager;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
@@ -19,7 +19,7 @@ import java.util.Objects;
 
 public class ComContract extends Command {
 
-    private final ContractManager contractManager;
+    private final ContractsManager contractsManager;
 
     public ComContract() {
         super("contrat", "Gérer vos contrats et voir les offres disponibles");
@@ -33,7 +33,7 @@ public class ComContract extends Command {
         // Ajouter les sous-commandes
         addSubcommands(viewContract, requestOffers, adminGenerate);
         
-        this.contractManager = Main.getContractManager();
+        this.contractsManager = Main.getContractsManager();
     }
 
     @Override
@@ -147,7 +147,7 @@ public class ComContract extends Command {
         
         if (userData == null) {
             // Nouvel utilisateur, créer un contrat d'entrée
-            Document entryContract = contractManager.generateEntryContract(e.getMember());
+            Document entryContract = contractsManager.generateEntryContract(e.getMember());
             if (entryContract != null) {
                 String teamName = entryContract.getString("teamName");
                 e.getHook().sendMessage("Bienvenue dans la ligue ! Vous avez signé un contrat d'entrée de 3 ans avec **" +
@@ -176,7 +176,7 @@ public class ComContract extends Command {
         }
         
         // Vérifier si des offres sont déjà en attente
-        Document pendingOffers = Main.getMongoConnection().getDatabase().getCollection("contractOffers")
+        Document pendingOffers = Main.getMongoConnection().getDatabase().getCollection("contract_offers")
                 .find(new Document("userId", member.getId()).append("status", "pending"))
                 .first();
         
@@ -187,7 +187,7 @@ public class ComContract extends Command {
         }
         
         // Générer de nouvelles offres
-        contractManager.sendContractOffers(e.getUser());
+        contractsManager.sendContractOffers(e.getUser());
         
         e.getHook().sendMessage("Des offres de contrat vous ont été envoyées en message privé. " +
                                     "Vous avez 3 jours pour en accepter une, sinon vous deviendrez un agent libre.").queue();
@@ -210,7 +210,7 @@ public class ComContract extends Command {
             }
             
             // Générer et envoyer des offres
-            contractManager.sendContractOffers(targetUser);
+            contractsManager.sendContractOffers(targetUser);
             
             e.getHook().sendMessage("Des offres de contrat ont été générées et envoyées à **" +
                                         targetMember.getEffectiveName() + "**.").queue();

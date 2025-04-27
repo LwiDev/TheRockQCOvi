@@ -107,9 +107,31 @@ public class ComRank extends Command {
                 ordinal = roundPick + "";
             }
 
+            // Récupérer les informations du contrat
+            // Ces valeurs seraient normalement extraites de la base de données
+            // Pour l'exemple, nous utiliserons des valeurs fictives
+            Document contractData = userData.get("contract", Document.class);
+            int contractYears = 0;
+            double contractSalary = 0.0;
+            String contractType = "N/A";
+            boolean hasNTC = false;
+            boolean hasNMC = false;
+            String ntcDetails = "";
+            String nmcDetails = "";
+
+            if (contractData != null) {
+                contractYears = contractData.getInteger("years", 0);
+                contractSalary = contractData.getInteger("salary").doubleValue();
+                contractType = contractData.getString("type");
+                hasNTC = contractData.getBoolean("hasNTC", false);
+                hasNMC = contractData.getBoolean("hasNMC", false);
+                ntcDetails = contractData.getString("ntcDetails");
+                nmcDetails = contractData.getString("nmcDetails");
+            }
+
             try {
                 BufferedImage avatar = ImageUtils.getUserAvatar(targetUser);
-                ByteArrayOutputStream outputStream = generateModernPlayerCard(username, teamName, formattedDate, ordinal, rank, teamColor, logoPath, avatar, reputationScore, reputationRank);
+                ByteArrayOutputStream outputStream = generateModernPlayerCard(username, teamName, formattedDate, ordinal, rank, teamColor, logoPath, avatar, reputationScore, reputationRank, contractYears, contractSalary, contractType, hasNTC, hasNMC, ntcDetails, nmcDetails);
                 e.getHook().sendFiles(FileUpload.fromData(outputStream.toByteArray(), username + "_rank.png")).queue();
             } catch (Exception ex) {
                 e.getHook().sendMessage("Erreur lors de la génération de la carte de rang : " + ex.getMessage()).setEphemeral(true).queue();
@@ -120,7 +142,11 @@ public class ComRank extends Command {
         }
     }
 
-    private ByteArrayOutputStream generateModernPlayerCard(String username, String teamName, String draftDate, String roundPick, String rank, Color teamColor, String logoPath, BufferedImage avatar, int reputationScore, String reputationRank) throws IOException {
+    // Image du profil
+    private ByteArrayOutputStream generateModernPlayerCard(String username, String teamName, String draftDate, String roundPick, String rank,
+                                                           Color teamColor, String logoPath, BufferedImage avatar, int reputationScore,
+                                                           String reputationRank, int contractYears, double contractSalary, String contractType,
+                                                           boolean hasNTC, boolean hasNMC, String ntcDetails, String nmcDetails) throws IOException {
         int width = 800;
         int height = 500;
 
@@ -167,8 +193,14 @@ public class ComRank extends Command {
         int infoBarY = 180;
         drawInfoBar(g2d, width, infoBarY, teamName, roundPick);
 
-        // Stats section using the provided team color
-        drawInfosSection(g2d, width, infoBarY + 70, reputationScore, draftDate, teamColor, reputationRank);
+        // Divisez l'espace en deux colonnes pour les sections
+        int columnWidth = (width - 120) / 2; // 60px de marge de chaque côté
+
+        // Section Informations (à gauche)
+        drawInfosSection(g2d, columnWidth, infoBarY + 70, reputationScore, draftDate, teamColor, reputationRank);
+
+        // Section Contrat (à droite)
+        drawContractSection(g2d, width, columnWidth, infoBarY + 70, contractYears, contractSalary, contractType, hasNTC, hasNMC, ntcDetails, nmcDetails, teamColor);
 
         g2d.dispose();
 
@@ -261,19 +293,107 @@ public class ComRank extends Command {
         g2d.drawString(infoText, textX, y + 27);
     }
 
-    private void drawInfosSection(Graphics2D g2d, int width, int startY, int reputationScore, String draftDate, Color teamColor, String reputationRank) {
-        g2d.setColor(new Color(40, 50, 60, 180));
+//    private void drawInfosSection(Graphics2D g2d, int width, int startY, int reputationScore, String draftDate, Color teamColor, String reputationRank) {
+//        g2d.setColor(new Color(40, 50, 60, 180));
+//
+//        // Barre d'accent latérale
+//        g2d.setColor(Color.GRAY);
+//        g2d.fillRect(45, startY + 10, 5, 30);
+//
+//        // Texte du titre
+//        g2d.setFont(new Font("Arial", Font.BOLD, 20));
+//        g2d.setColor(teamColor);
+//        g2d.drawString("INFORMATIONS", 60, startY + 30);
+//
+//        // Stats list with more spacing
+//        String[] statNames = {"Repêché le", "Niveau", "Score"};
+//        String[] statValues = {
+//                String.valueOf(draftDate),
+//                String.valueOf(reputationRank),
+//                reputationScore + "%"
+//        };
+//
+//        g2d.setFont(new Font("Arial", Font.BOLD, 20));
+//        int lineHeight = 60;
+//        int rightMargin = 60;
+//
+//        FontMetrics fm = g2d.getFontMetrics();
+//        int maxValueWidth = Math.max(fm.stringWidth(statValues[0]), fm.stringWidth(statValues[1]));
+//
+//        // Définir une largeur de barre raisonnable qui ne dépasse pas la largeur du texte le plus long
+//        int barWidth = Math.min(180, maxValueWidth);
+//
+//        for (int i = 0; i < statNames.length; i++) {
+//            int y = startY + 75 + (i * lineHeight);
+//
+//            // Stat name
+//            g2d.setColor(Color.WHITE);
+//            g2d.drawString(statNames[i], 60, y);
+//
+//            if (statNames[i].equals("Niveau")) {
+//                String value = statValues[i];
+//                int valueWidth = fm.stringWidth(value);
+//                int valueX = width - rightMargin - valueWidth;
+//                FontUtils.drawMixedEmojiText(g2d, value, valueX, y, 20, new Font("Arial", Font.BOLD, 20), Color.WHITE);
+//            } else if (statNames[i].equals("Score")) {
+//                // Barre de progression (alignée à droite, même largeur que le texte ci-dessus)
+//                int barHeight = 20;
+//                int barX = width - rightMargin - barWidth;
+//                int barY = y - 15;
+//
+//                // Fond de la barre (gris foncé)
+//                g2d.setColor(new Color(40, 40, 50));
+//                g2d.fillRect(barX, barY, barWidth, barHeight);
+//
+//                // Partie remplie de la barre
+//                Color scoreColor = ReputationManager.getReputationColorFromScore(reputationScore);
+//                int fillWidth = (int)(barWidth * reputationScore / 100.0);
+//                g2d.setColor(scoreColor);
+//                g2d.fillRect(barX, barY, fillWidth, barHeight);
+//
+//                // Contour de la barre
+//                g2d.setColor(new Color(70, 70, 80));
+//                g2d.drawRect(barX, barY, barWidth, barHeight);
+//
+//                // Affichage du pourcentage à l'intérieur de la barre
+//                String scoreText = reputationScore + "%";
+//                Font scoreFont = new Font("Arial", Font.BOLD, 14);
+//                g2d.setFont(scoreFont);
+//                FontMetrics scoreFm = g2d.getFontMetrics();
+//                int textWidth = scoreFm.stringWidth(scoreText);
+//                int textX = barX + (barWidth - textWidth) / 2;
+//                int textY = barY + ((barHeight - scoreFm.getHeight()) / 2) + scoreFm.getAscent();
+//
+//                g2d.setColor(Color.WHITE);
+//                g2d.drawString(scoreText, textX, textY);
+//
+//                // Revenir à la police d'origine
+//                g2d.setFont(new Font("Arial", Font.BOLD, 20));
+//            } else {
+//                String value = statValues[i];
+//                int valueWidth = fm.stringWidth(value);
+//                g2d.setColor(Color.WHITE);
+//                g2d.drawString(value, width - rightMargin - valueWidth, y);
+//            }
+//
+//            // Separator line between stats
+//            if (i < statNames.length - 1) {
+//                g2d.setColor(new Color(60, 60, 80)); // Subtle separator
+//                g2d.drawLine(60, y + 15, width - 60, y + 15);
+//            }
+//        }
+//    }
 
-        // Barre d'accent latérale
+    private void drawInfosSection(Graphics2D g2d, int columnWidth, int startY, int reputationScore, String draftDate, Color teamColor, String reputationRank) {
+        // Barre d'accent latérale et titre - garde la même position Y
         g2d.setColor(Color.GRAY);
-        g2d.fillRect(45, startY + 10, 5, 30);
+        g2d.fillRect(60, startY + 10, 5, 30);
 
-        // Texte du titre
         g2d.setFont(new Font("Arial", Font.BOLD, 20));
         g2d.setColor(teamColor);
-        g2d.drawString("INFORMATIONS", 60, startY + 30);
+        g2d.drawString("INFORMATIONS", 75, startY + 30);
 
-        // Stats list with more spacing
+        // Stats list
         String[] statNames = {"Repêché le", "Niveau", "Score"};
         String[] statValues = {
                 String.valueOf(draftDate),
@@ -281,51 +401,44 @@ public class ComRank extends Command {
                 reputationScore + "%"
         };
 
-        g2d.setFont(new Font("Arial", Font.BOLD, 20));
-        int lineHeight = 60;
-        int rightMargin = 60;
+        g2d.setFont(new Font("Arial", Font.BOLD, 18));
+        int lineHeight = 55; // Hauteur de ligne unifiée
+        int leftMargin = 75;
+        int firstLineY = startY + 80; // Position Y fixe pour la première ligne
 
         FontMetrics fm = g2d.getFontMetrics();
-        int maxValueWidth = Math.max(fm.stringWidth(statValues[0]), fm.stringWidth(statValues[1]));
-
-        // Définir une largeur de barre raisonnable qui ne dépasse pas la largeur du texte le plus long
-        int barWidth = Math.min(180, maxValueWidth);
+        int barWidth = 150;
 
         for (int i = 0; i < statNames.length; i++) {
-            int y = startY + 75 + (i * lineHeight);
+            int y = firstLineY + (i * lineHeight); // Positions Y calculées à partir de la première ligne
 
             // Stat name
             g2d.setColor(Color.WHITE);
-            g2d.drawString(statNames[i], 60, y);
+            g2d.drawString(statNames[i], leftMargin, y);
 
             if (statNames[i].equals("Niveau")) {
                 String value = statValues[i];
                 int valueWidth = fm.stringWidth(value);
-                int valueX = width - rightMargin - valueWidth;
-                FontUtils.drawMixedEmojiText(g2d, value, valueX, y, 20, new Font("Arial", Font.BOLD, 20), Color.WHITE);
+                int valueX = 60 + columnWidth - valueWidth - 20;
+                FontUtils.drawMixedEmojiText(g2d, value, valueX, y, 18, new Font("Arial", Font.BOLD, 18), Color.WHITE);
             } else if (statNames[i].equals("Score")) {
-                // Barre de progression (alignée à droite, même largeur que le texte ci-dessus)
-                int barHeight = 20;
-                int barX = width - rightMargin - barWidth;
+                int barHeight = 18;
+                int barX = 60 + columnWidth - barWidth - 20;
                 int barY = y - 15;
 
-                // Fond de la barre (gris foncé)
                 g2d.setColor(new Color(40, 40, 50));
                 g2d.fillRect(barX, barY, barWidth, barHeight);
 
-                // Partie remplie de la barre
                 Color scoreColor = ReputationManager.getReputationColorFromScore(reputationScore);
                 int fillWidth = (int)(barWidth * reputationScore / 100.0);
                 g2d.setColor(scoreColor);
                 g2d.fillRect(barX, barY, fillWidth, barHeight);
 
-                // Contour de la barre
                 g2d.setColor(new Color(70, 70, 80));
                 g2d.drawRect(barX, barY, barWidth, barHeight);
 
-                // Affichage du pourcentage à l'intérieur de la barre
                 String scoreText = reputationScore + "%";
-                Font scoreFont = new Font("Arial", Font.BOLD, 14);
+                Font scoreFont = new Font("Arial", Font.BOLD, 13);
                 g2d.setFont(scoreFont);
                 FontMetrics scoreFm = g2d.getFontMetrics();
                 int textWidth = scoreFm.stringWidth(scoreText);
@@ -335,21 +448,101 @@ public class ComRank extends Command {
                 g2d.setColor(Color.WHITE);
                 g2d.drawString(scoreText, textX, textY);
 
-                // Revenir à la police d'origine
-                g2d.setFont(new Font("Arial", Font.BOLD, 20));
+                g2d.setFont(new Font("Arial", Font.BOLD, 18));
             } else {
                 String value = statValues[i];
                 int valueWidth = fm.stringWidth(value);
                 g2d.setColor(Color.WHITE);
-                g2d.drawString(value, width - rightMargin - valueWidth, y);
+                g2d.drawString(value, 60 + columnWidth - valueWidth - 20, y);
             }
 
             // Separator line between stats
             if (i < statNames.length - 1) {
-                g2d.setColor(new Color(60, 60, 80)); // Subtle separator
-                g2d.drawLine(60, y + 15, width - 60, y + 15);
+                g2d.setColor(new Color(60, 60, 80));
+                g2d.drawLine(leftMargin, y + 15, 60 + columnWidth - 20, y + 15);
             }
         }
+    }
+
+    private void drawContractSection(Graphics2D g2d, int totalWidth, int columnWidth, int startY,
+                                     int years, double salary, String contractType,
+                                     boolean hasNTC, boolean hasNMC, String ntcDetails, String nmcDetails,
+                                     Color teamColor) {
+        int leftMargin = 60 + columnWidth + 40;
+
+        // Barre d'accent latérale et titre - garde la même position Y
+        g2d.setColor(Color.GRAY);
+        g2d.fillRect(leftMargin, startY + 10, 5, 30);
+
+        g2d.setFont(new Font("Arial", Font.BOLD, 20));
+        g2d.setColor(teamColor);
+        g2d.drawString("CONTRAT", leftMargin + 15, startY + 30);
+
+        g2d.setFont(new Font("Arial", Font.BOLD, 18));
+        int lineHeight = 55; // Hauteur de ligne unifiée
+        int firstLineY = startY + 80; // Position Y fixe pour la première ligne - identique à l'autre section
+
+        // Durée du contrat - première ligne à position fixe
+        g2d.setColor(Color.WHITE);
+        String yearsWithType = years + " an" + (years > 1 ? "s" : "") + " / " + contractType;
+        drawContractLine(g2d, "Durée", yearsWithType, leftMargin, firstLineY);
+
+        // Séparateur après la première ligne
+        g2d.setColor(new Color(60, 60, 80));
+        g2d.drawLine(leftMargin, firstLineY + 15, totalWidth - 60, firstLineY + 15);
+
+        // Salaire du contrat (avec type) - deuxième ligne
+        drawContractLine(g2d, "Salaire", Main.getContractsManager().getSalaryFormat(salary / 1000000.0), leftMargin, firstLineY + lineHeight);
+
+        // Séparateur après la deuxième ligne
+        g2d.setColor(new Color(60, 60, 80));
+        g2d.drawLine(leftMargin, firstLineY + lineHeight + 15, totalWidth - 60, firstLineY + lineHeight + 15);
+
+        // Clauses - troisième ligne
+        String clausesText = "";
+        if (hasNTC && hasNMC) {
+            clausesText = "NTC & NMC";
+        } else if (hasNTC) {
+            clausesText = "NTC";
+        } else if (hasNMC) {
+            clausesText = "NMC";
+        } else {
+            clausesText = "Aucune";
+        }
+
+        drawContractLine(g2d, "Clauses", clausesText, leftMargin, firstLineY + (lineHeight * 2));
+
+        // Détails des clauses si présentes
+        if (hasNTC || hasNMC) {
+            int detailsY = firstLineY + (lineHeight * 3);
+            // Séparateur fin
+            g2d.setColor(new Color(60, 60, 80, 100));
+            g2d.drawLine(leftMargin + 15, detailsY - lineHeight/2, totalWidth - 75, detailsY - lineHeight/2);
+
+            g2d.setFont(new Font("Arial", Font.ITALIC, 16));
+
+            if (hasNTC) {
+                g2d.setColor(new Color(220, 220, 220));
+                g2d.drawString("NTC: " + ntcDetails, leftMargin + 15, detailsY);
+                detailsY += lineHeight - 15;
+            }
+
+            if (hasNMC) {
+                g2d.setColor(new Color(220, 220, 220));
+                g2d.drawString("NMC: " + nmcDetails, leftMargin + 15, detailsY);
+            }
+        }
+    }
+
+    private void drawContractLine(Graphics2D g2d, String label, String value, int leftMargin, int y) {
+        g2d.setColor(Color.WHITE);
+        g2d.drawString(label, leftMargin + 15, y);
+
+        FontMetrics fm = g2d.getFontMetrics();
+        int valueWidth = fm.stringWidth(value);
+        int rightEdge = 800 - 60; // largeur totale - marge droite
+
+        g2d.drawString(value, rightEdge - valueWidth, y);
     }
 
     private Color getDarkerColor(Color original) {

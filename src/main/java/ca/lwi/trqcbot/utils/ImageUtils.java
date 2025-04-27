@@ -25,6 +25,10 @@ import java.util.Objects;
 public class ImageUtils {
 
     public static BufferedImage loadSVG(String svgUrl, int maxDimension) throws IOException {
+        return loadSVG(svgUrl, maxDimension, maxDimension);
+    }
+
+    public static BufferedImage loadSVG(String svgUrl, int height, int width) throws IOException {
         try {
             // Parser le document SVG
             String parser = XMLResourceDescriptor.getXMLParserClassName();
@@ -39,8 +43,8 @@ public class ImageUtils {
 
             // Transcodage en image PNG
             PNGTranscoder transcoder = new PNGTranscoder();
-            transcoder.addTranscodingHint(ImageTranscoder.KEY_WIDTH, (float) maxDimension);
-            transcoder.addTranscodingHint(ImageTranscoder.KEY_HEIGHT, (float) maxDimension);
+            transcoder.addTranscodingHint(ImageTranscoder.KEY_WIDTH, (float) width);
+            transcoder.addTranscodingHint(ImageTranscoder.KEY_HEIGHT, (float) height);
 
             // Input SVG
             TranscoderInput input = new TranscoderInput(svgDocument);
@@ -55,8 +59,8 @@ public class ImageUtils {
             // Convertir le résultat en BufferedImage
             ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
             return ImageIO.read(inputStream);
-
         } catch (Exception e) {
+            System.out.println("Erreur lors du chargement du SVG: " + svgUrl + " - " + e.getMessage());
             throw new IOException("Erreur lors du chargement du SVG: " + e.getMessage(), e);
         }
     }

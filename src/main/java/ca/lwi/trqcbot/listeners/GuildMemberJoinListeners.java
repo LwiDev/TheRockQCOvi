@@ -59,7 +59,7 @@ public class GuildMemberJoinListeners extends ListenerAdapter {
         }
 
         Main.getDraftMessageHandler().createMessage(e.getGuild(), e.getMember());
-        Document contract = Main.getContractManager().generateEntryContract(member);
+        Document contract = Main.getContractsManager().generateEntryContract(member);
         if (contract != null) {
             String teamName = contract.getString("teamName");
             double salary = contract.getInteger("salary") / 1000000.0;

@@ -1,6 +1,7 @@
 package ca.lwi.trqcbot.contracts;
 
 import ca.lwi.trqcbot.Main;
+import ca.lwi.trqcbot.utils.FontUtils;
 import ca.lwi.trqcbot.utils.ImageUtils;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.User;
@@ -14,6 +15,7 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
+import java.awt.geom.GeneralPath;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -25,7 +27,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public class ContractManager extends ListenerAdapter {
+public class ContractsManager extends ListenerAdapter {
 
     private static final int ENTRY_CONTRACT_DURATION_DAYS = 3; // 3 ans
     private static final int MAX_CONTRACT_YEARS = 8; // 8 ans max
@@ -42,7 +44,7 @@ public class ContractManager extends ListenerAdapter {
 
     private final ScheduledExecutorService scheduler;
 
-    public ContractManager() {
+    public ContractsManager() {
         this.scheduler = Executors.newScheduledThreadPool(1);
         scheduler.scheduleAtFixedRate(this::checkExpiringContracts, 0, 24, TimeUnit.HOURS);
     }
@@ -51,8 +53,8 @@ public class ContractManager extends ListenerAdapter {
     public void onButtonInteraction(@NotNull ButtonInteractionEvent event) {
         String componentId = event.getComponentId();
         if (componentId.startsWith("contract_")) {
-            ContractManager contractManager = Main.getContractManager();
-            contractManager.handleContractButtonInteraction(event);
+            ContractsManager contractsManager = Main.getContractsManager();
+            contractsManager.handleContractButtonInteraction(event);
         }
     }
 
@@ -112,6 +114,7 @@ public class ContractManager extends ListenerAdapter {
         calendar.setTime(contractStartDate);
         int contractDays = adjustedYears * DAYS_PER_YEAR;
         calendar.add(Calendar.DAY_OF_MONTH, contractDays);
+
         Date expiryDate = calendar.getTime();
 
         Document contract = new Document()
@@ -177,12 +180,17 @@ public class ContractManager extends ListenerAdapter {
             String userId = user.getString("userId");
             User discordUser = Main.getJda().retrieveUserById(userId).complete();
             if (discordUser != null) {
-                sendContractOffers(discordUser);
-                Main.getMongoConnection().getDatabase().getCollection("users")
-                        .updateOne(
-                                new Document("_id", user.getObjectId("_id")),
-                                new Document("$set", new Document("contract.status", "expired"))
-                        );
+                Document pendingOffers = Main.getMongoConnection().getDatabase().getCollection("contract_offers")
+                        .find(new Document("userId", userId).append("status", "pending"))
+                        .first();
+                if (pendingOffers == null) {
+                    sendContractOffers(discordUser);
+                    Main.getMongoConnection().getDatabase().getCollection("users")
+                            .updateOne(
+                                    new Document("_id", user.getObjectId("_id")),
+                                    new Document("$set", new Document("contract.status", "expired"))
+                            );
+                }
             }
         }
     }
@@ -225,6 +233,8 @@ public class ContractManager extends ListenerAdapter {
             for (Document team : randomTeams) {
                 offers.add(createOfferForTeam(team, reputationScore, false));
             }
+
+            Collections.shuffle(offers);
 
             // Générer l'image des offres
             BufferedImage contractImage = generateContractOffersImage(offers);
@@ -271,29 +281,15 @@ public class ContractManager extends ListenerAdapter {
      */
     private ContractOffer createOfferForTeam(Document team, int reputationScore, boolean isCurrentTeam) {
         String teamName = team.getString("name");
-
-        // Déterminer la durée du contrat (entre 1 et 8 ans, plus de chance d'avoir un contrat plus long avec une bonne réputation)
         int maxYears = Math.max(1, Math.min(8, (reputationScore / 20) + 1));
         int years = new Random().nextInt(maxYears) + 1;
-
-        // Calculer le salaire basé sur la réputation (min 1M, max 10M)
-        // Les joueurs avec une meilleure réputation obtiennent de meilleurs salaires
         double baseSalary = 1.0 + (reputationScore / 10.0);
-
-        // L'équipe actuelle offre généralement un peu plus (loyauté)
         if (isCurrentTeam) baseSalary *= 1.1;
-
-        // Ajout d'une variation aléatoire (±10%)
         double randomFactor = 0.9 + (new Random().nextDouble() * 0.2);
         double salary = baseSalary * randomFactor;
-
-        // S'assurer que le salaire est dans les limites
         salary = Math.max(MIN_SALARY / 1000000.0, Math.min(salary, MAX_SALARY / 1000000.0));
-
-        // Arrondir à 2 décimales
         salary = Math.round(salary * 100.0) / 100.0;
 
-        // Le type de contrat dépend de la réputation
         String contractType;
         if (reputationScore <= TWO_WAY_REPUTATION_THRESHOLD) {
             contractType = (new Random().nextDouble() < 0.7) ? "2 volets" : "1 volet";
@@ -301,13 +297,11 @@ public class ContractManager extends ListenerAdapter {
             contractType = "1 volet";
         }
 
-        // Variables pour suivre les clauses et leurs détails
         boolean hasNTC = false;
         boolean hasNMC = false;
         String ntcDetails = "";
         String nmcDetails = "";
 
-        // Implémenter les clauses en fonction de la réputation
         Random random = new Random();
 
         // Moins de 20 = aucune clause possible
@@ -317,8 +311,7 @@ public class ContractManager extends ListenerAdapter {
             if (random.nextDouble() < 0.25) {
                 hasNTC = true;
                 int listSize = random.nextInt(5) + 3; // Liste de 3 à 7 équipes
-                boolean isAcceptList = random.nextBoolean();
-                ntcDetails = "Liste de " + listSize + " équipes " + (isAcceptList ? "acceptées" : "refusées");
+                ntcDetails = "Protection contre " + listSize + " équipes";
             }
         }
         // 40 à 60 : plus probable, plus d'équipes
@@ -327,15 +320,14 @@ public class ContractManager extends ListenerAdapter {
             if (random.nextDouble() < 0.4) {
                 hasNTC = true;
                 int listSize = random.nextInt(10) + 5; // Liste de 5 à 14 équipes
-                boolean isAcceptList = random.nextBoolean();
-                ntcDetails = "Liste de " + listSize + " équipes " + (isAcceptList ? "acceptées" : "refusées");
+                ntcDetails = "Protection contre " + listSize + " équipes";
             }
 
             // Très petite chance d'avoir une NMC modifiée
             if (random.nextDouble() < 0.15) {
                 hasNMC = true;
                 int activeYear = Math.min(years - 1, random.nextInt(3) + 2); // Active après 2-4 ans
-                nmcDetails = "Active à partir de la " + activeYear + "e année";
+                nmcDetails = "Reportée de " + activeYear + " an" + (activeYear > 1 ? "s" : "");
             }
         }
         // 60 à 80 : presque la meilleure
@@ -347,13 +339,11 @@ public class ContractManager extends ListenerAdapter {
 
                 if (ntcType < 0.5) {
                     // NTC complète
-                    ntcDetails = "Protection complète contre les échanges";
+                    ntcDetails = "Complète";
                 } else {
                     // NTC modifiée avec liste plus longue
                     int listSize = random.nextInt(10) + 10; // Liste de 10 à 19 équipes
-                    boolean isAcceptList = random.nextBoolean();
-                    ntcDetails = "Liste de " + listSize + " équipes " +
-                            (isAcceptList ? "acceptées" : "refusées");
+                    ntcDetails = "Protection contre " + listSize + " équipes";
                 }
             }
 
@@ -362,9 +352,9 @@ public class ContractManager extends ListenerAdapter {
                 hasNMC = true;
                 if (random.nextDouble() < 0.6) {
                     int activeYear = Math.min(years - 1, random.nextInt(2) + 1); // Active après 1-2 ans
-                    nmcDetails = "Active à partir de la " + activeYear + "e année";
+                    nmcDetails = "Reportée de " + activeYear + " an" + (activeYear > 1 ? "s" : "");
                 } else {
-                    nmcDetails = "Protection contre le ballottage et la rétrogradation";
+                    nmcDetails = "Complète";
                 }
             }
         }
@@ -373,13 +363,13 @@ public class ContractManager extends ListenerAdapter {
             // Très forte chance d'avoir une NTC complète
             if (random.nextDouble() < 0.9) {
                 hasNTC = true;
-                ntcDetails = "Protection complète";
+                ntcDetails = "Complète";
             }
 
             // Bonne chance d'avoir une NMC
             if (random.nextDouble() < 0.5) {
                 hasNMC = true;
-                nmcDetails = "Protection complète";
+                nmcDetails = "Complète";
             }
         }
         // 95 à 100 : complète, NTC + NMC garantis
@@ -387,16 +377,15 @@ public class ContractManager extends ListenerAdapter {
             // NTC et NMC garantis
             hasNTC = true;
             hasNMC = true;
-            ntcDetails = "Protection complète";
-            nmcDetails = "Protection complète";
+            ntcDetails = "Complète";
+            nmcDetails = "Complète";
         }
 
         // L'équipe actuelle offre plus facilement des clauses (fidélité)
         if (isCurrentTeam && !hasNTC && reputationScore >= 30 && random.nextDouble() < 0.3) {
             hasNTC = true;
             int listSize = random.nextInt(8) + 5; // Liste de 5 à 12 équipes
-            boolean isAcceptList = random.nextBoolean();
-            ntcDetails = "Liste de " + listSize + " équipes " + (isAcceptList ? "acceptées" : "refusées");
+            ntcDetails = "Protection contre " + listSize + " équipes";
         }
 
         return new ContractOffer(teamName, years, salary, contractType, hasNTC, hasNMC, ntcDetails, nmcDetails);
@@ -407,9 +396,9 @@ public class ContractManager extends ListenerAdapter {
      * @param offers Liste des offres de contrat
      * @return Une image BufferedImage des offres
      */
-    private BufferedImage generateContractOffersImage(List<ContractOffer> offers) throws IOException {
+    private BufferedImage generateContractOffersImage(List<ContractOffer> offers) {
         int width = 1200;
-        int height = 600; // Hauteur réduite pour éliminer l'espace vide en bas
+        int height = 520;
         int panelWidth = width / offers.size();
         int padding = 15;
 
@@ -444,25 +433,20 @@ public class ContractManager extends ListenerAdapter {
                 }
             }
 
-            // Ajout du watermark de l'équipe en arrière-plan (logo transparent)
+            // Zone rectangulaire en haut pour l'équipe
+            g2d.setColor(teamColor);
+            g2d.fillRect(x, padding, panelContentWidth, 180);
+
+            // Ajout du watermark de l'équipe derrière le logo (dans le header)
             try {
                 if (teamData != null && teamData.containsKey("logo")) {
                     String logoPath = teamData.getString("logo");
                     if (logoPath != null && !logoPath.isEmpty()) {
-                        BufferedImage watermarkLogo = ImageUtils.loadImage(logoPath, 300);
-
-                        // Dessiner le watermark avec transparence
-                        AlphaComposite alphaChannel = AlphaComposite.getInstance(
-                                AlphaComposite.SRC_OVER, 0.08f);
+                        BufferedImage watermarkLogo = ImageUtils.loadImage(logoPath, 250);
+                        AlphaComposite alphaChannel = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.15f);
                         Composite originalComposite = g2d.getComposite();
                         g2d.setComposite(alphaChannel);
-
-                        int watermarkY = (height - padding) / 2;
-                        g2d.drawImage(watermarkLogo,
-                                x + (panelContentWidth - 300) / 2,
-                                watermarkY - 100,
-                                300, 300, null);
-
+                        g2d.drawImage(watermarkLogo, x + (panelContentWidth - 250) / 2, padding + (180 - 250) / 2, 250, 250, null);
                         g2d.setComposite(originalComposite);
                     }
                 }
@@ -470,67 +454,76 @@ public class ContractManager extends ListenerAdapter {
                 System.err.println("Erreur lors du chargement du watermark: " + e.getMessage());
             }
 
-            // Zone rectangulaire en haut pour l'équipe
-            g2d.setColor(teamColor);
-            g2d.fillRect(x, padding, panelContentWidth, 180);
-
-            // Essayer de charger et afficher le logo de l'équipe
             try {
                 if (teamData != null && teamData.containsKey("logo")) {
                     String logoPath = teamData.getString("logo");
                     if (logoPath != null && !logoPath.isEmpty()) {
-                        BufferedImage logo = ImageUtils.loadImage(logoPath, 120);
-                        g2d.drawImage(logo, x + (panelContentWidth - 120) / 2, padding + 25, 120, 120, null);
+                        BufferedImage logo = ImageUtils.loadImage(logoPath, 125);
+                        g2d.drawImage(logo, x + (panelContentWidth - 125) / 2, padding + 25, 125, 125, null);
                     }
                 }
             } catch (Exception e) {
                 System.err.println("Erreur lors du chargement du logo de l'équipe: " + e.getMessage());
             }
 
-            // Nom de l'équipe avec plus d'espace après le logo
+            // Appliquer le dégradé à partir du bas du header jusqu'en bas
+            int gradientStartY = padding + 180;
+            int gradientHeight = (height - padding) - gradientStartY;
+
+            // Créer et appliquer le dégradé
+            Color darkerTeamColor = getDarkerColor(teamColor);
+            Color veryDarkColor = new Color(10, 10, 10);
+            GradientPaint gradientPaint = new GradientPaint(x, gradientStartY, darkerTeamColor, x, height - padding, veryDarkColor);
+
+            Paint originalPaint = g2d.getPaint();
+            g2d.setPaint(gradientPaint);
+            g2d.fillRect(x, gradientStartY, panelContentWidth, gradientHeight);
+            g2d.setPaint(originalPaint);
+
+            // Nom de l'équipe directement sur le dégradé
             g2d.setColor(Color.WHITE);
-            g2d.setFont(new Font("Arial", Font.BOLD, 18));
+            g2d.setFont(new Font("Arial", Font.BOLD, 20));
             String teamName = offer.teamName();
             FontMetrics fm = g2d.getFontMetrics();
             int textWidth = fm.stringWidth(teamName);
-            g2d.drawString(teamName, x + (panelContentWidth - textWidth) / 2, padding + 180 + 25);
+            g2d.drawString(teamName, x + (panelContentWidth - textWidth) / 2, padding + 180 + 30);
 
-            // Ligne de séparation
+            // Simple ligne sous le nom
             g2d.setColor(new Color(40, 40, 40));
-            g2d.fillRect(x + 30, padding + 220, panelContentWidth - 60, 1);
+            g2d.fillRect(x + 30, padding + 180 + 40, panelContentWidth - 60, 1);
 
             // Détails du contrat
-            int detailsBaseY = padding + 260;
+            int detailsBaseY = padding + 265;
             int rowHeight = 45; // Espacement réduit entre les lignes
             int labelX = x + 30;
             int valueX = x + panelContentWidth - 30;
 
             // Years
-            g2d.setColor(new Color(180, 180, 180));
-            g2d.setFont(new Font("Arial", Font.PLAIN, 18));
-            g2d.drawString("Années:", labelX, detailsBaseY);
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("Arial", Font.BOLD, 18));
+            g2d.drawString("Durée", labelX, detailsBaseY);
             g2d.setColor(Color.WHITE);
             g2d.setFont(new Font("Arial", Font.BOLD, 20));
-            String yearsText = String.valueOf(offer.years());
+            String yearsText = offer.years() + " an" + (offers.getFirst().years() > 1 ? "s" : "");
             fm = g2d.getFontMetrics();
             textWidth = fm.stringWidth(yearsText);
             g2d.drawString(yearsText, valueX - textWidth, detailsBaseY);
 
             // Yearly salary
-            g2d.setColor(new Color(180, 180, 180));
-            g2d.setFont(new Font("Arial", Font.PLAIN, 18));
-            g2d.drawString("Salaire annuel:", labelX, detailsBaseY + rowHeight);
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("Arial", Font.BOLD, 18));
+            g2d.drawString("Salaire annuel", labelX, detailsBaseY + rowHeight);
             g2d.setColor(new Color(100, 255, 100)); // Vert pour l'argent
             g2d.setFont(new Font("Arial", Font.BOLD, 20));
-            String salaryText = "$" + String.format("%.2fM", offer.salary());
+            String salaryText = getSalaryFormat(offer.salary());
             fm = g2d.getFontMetrics();
             textWidth = fm.stringWidth(salaryText);
             g2d.drawString(salaryText, valueX - textWidth, detailsBaseY + rowHeight);
 
             // Contract type
-            g2d.setColor(new Color(180, 180, 180));
-            g2d.setFont(new Font("Arial", Font.PLAIN, 18));
-            g2d.drawString("Type de contrat:", labelX, detailsBaseY + 2 * rowHeight);
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("Arial", Font.BOLD, 18));
+            g2d.drawString("Type de contrat", labelX, detailsBaseY + 2 * rowHeight);
             g2d.setColor(Color.WHITE);
             g2d.setFont(new Font("Arial", Font.BOLD, 20));
             String contractTypeText = offer.contractType();
@@ -539,54 +532,48 @@ public class ContractManager extends ListenerAdapter {
             g2d.drawString(contractTypeText, valueX - textWidth, detailsBaseY + 2 * rowHeight);
 
             // Clauses spéciales - Nouveau format comme demandé
-            g2d.setColor(new Color(180, 180, 180));
-            g2d.setFont(new Font("Arial", Font.PLAIN, 18));
-            g2d.drawString("Clauses:", labelX, detailsBaseY + 3 * rowHeight);
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("Arial", Font.BOLD, 18));
+            g2d.drawString("Clauses", labelX, detailsBaseY + 3 * rowHeight);
 
             int clauseBaseY = detailsBaseY + 3 * rowHeight + 30; // Marge après "Clauses:"
-            int clauseIndent = 20; // Indentation pour les éléments de la liste
+            int clauseIndent = 15; // Indentation pour les éléments de la liste
             int clauseSpacing = 25; // Espace entre les clauses
 
-            if (!offer.hasNTC() && !offer.hasNMC()) {
-                g2d.setColor(Color.WHITE);
+            // NTC
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("Arial", Font.PLAIN, 16));
+            g2d.drawString("•", labelX + 3, clauseBaseY);
+
+            g2d.setColor(new Color(255, 180, 50)); // Orange pour NTC
+            g2d.setFont(new Font("Arial", Font.BOLD, 16));
+            g2d.drawString("NTC", labelX + clauseIndent, clauseBaseY);
+
+            // Détails NTC
+            g2d.setColor(Color.WHITE);
+            if (offer.hasNTC()) {
                 g2d.setFont(new Font("Arial", Font.BOLD, 16));
-                g2d.drawString("Aucune", labelX + clauseIndent, clauseBaseY);
+                g2d.drawString(": " + offer.ntcDetails(), labelX + clauseIndent + 40, clauseBaseY);
             } else {
-                int currentY = clauseBaseY;
+                FontUtils.drawMixedEmojiText(g2d, ": Aucune", labelX + clauseIndent + 40, clauseBaseY, 16, new Font("Arial", Font.BOLD, 16), Color.WHITE);
+            }
 
-                if (offer.hasNTC()) {
-                    // Format "- NTC : détails"
-                    g2d.setColor(Color.WHITE);
-                    g2d.setFont(new Font("Arial", Font.PLAIN, 16));
-                    g2d.drawString("-", labelX, currentY);
+            // NMC
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("Arial", Font.PLAIN, 16));
+            g2d.drawString("•", labelX + 5, clauseBaseY + clauseSpacing);
 
-                    g2d.setColor(new Color(255, 180, 50)); // Orange pour NTC
-                    g2d.setFont(new Font("Arial", Font.BOLD, 16));
-                    g2d.drawString("NTC", labelX + clauseIndent, currentY);
+            g2d.setColor(new Color(50, 180, 255)); // Bleu pour NMC
+            g2d.setFont(new Font("Arial", Font.BOLD, 16));
+            g2d.drawString("NMC", labelX + clauseIndent, clauseBaseY + clauseSpacing);
 
-                    // Détails NTC à la suite
-                    g2d.setColor(new Color(200, 200, 200));
-                    g2d.setFont(new Font("Arial", Font.ITALIC, 14));
-                    g2d.drawString(": " + offer.ntcDetails(), labelX + clauseIndent + 45, currentY);
-
-                    currentY += clauseSpacing;
-                }
-
-                if (offer.hasNMC()) {
-                    // Format "- NMC : détails"
-                    g2d.setColor(Color.WHITE);
-                    g2d.setFont(new Font("Arial", Font.PLAIN, 16));
-                    g2d.drawString("-", labelX, currentY);
-
-                    g2d.setColor(new Color(50, 180, 255)); // Bleu pour NMC
-                    g2d.setFont(new Font("Arial", Font.BOLD, 16));
-                    g2d.drawString("NMC", labelX + clauseIndent, currentY);
-
-                    // Détails NMC à la suite
-                    g2d.setColor(new Color(200, 200, 200));
-                    g2d.setFont(new Font("Arial", Font.ITALIC, 14));
-                    g2d.drawString(": " + offer.nmcDetails(), labelX + clauseIndent + 45, currentY);
-                }
+            // Détails NMC
+            g2d.setColor(Color.WHITE);
+            if (offer.hasNMC()) {
+                g2d.setFont(new Font("Arial", Font.BOLD, 16));
+                g2d.drawString(": " + offer.nmcDetails(), labelX + clauseIndent + 40, clauseBaseY + clauseSpacing);
+            } else {
+                FontUtils.drawMixedEmojiText(g2d, ": Aucune", labelX + clauseIndent + 40, clauseBaseY + clauseSpacing, 16, new Font("Arial", Font.BOLD, 16), Color.WHITE);
             }
         }
 
@@ -597,6 +584,13 @@ public class ContractManager extends ListenerAdapter {
 
         g2d.dispose();
         return image;
+    }
+
+    // Méthode pour assombrir une couleur avec un facteur personnalisable
+    private Color getDarkerColor(Color original) {
+        float[] hsbValues = Color.RGBtoHSB(original.getRed(), original.getGreen(), original.getBlue(), null);
+        hsbValues[2] = Math.max(0, hsbValues[2] * (float) 0.3); // Facteur ajustable
+        return Color.getHSBColor(hsbValues[0], hsbValues[1], hsbValues[2]);
     }
 
     /**
@@ -631,11 +625,11 @@ public class ContractManager extends ListenerAdapter {
                 .append("status", "pending");
 
         // Supprimer les anciennes offres en attente pour cet utilisateur
-        Main.getMongoConnection().getDatabase().getCollection("contractOffers").deleteMany(
+        Main.getMongoConnection().getDatabase().getCollection("contract_offers").deleteMany(
                 new Document("userId", userId).append("status", "pending"));
 
         // Insérer les nouvelles offres
-        Main.getMongoConnection().getDatabase().getCollection("contractOffers").insertOne(offersDoc);
+        Main.getMongoConnection().getDatabase().getCollection("contract_offers").insertOne(offersDoc);
     }
 
     /**
@@ -648,14 +642,14 @@ public class ContractManager extends ListenerAdapter {
             Document query = new Document("userId", userId)
                     .append("status", "pending");
 
-            Document pendingOffers = Main.getMongoConnection().getDatabase().getCollection("contractOffers").find(query).first();
+            Document pendingOffers = Main.getMongoConnection().getDatabase().getCollection("contract_offers").find(query).first();
 
             if (pendingOffers != null) {
                 // L'utilisateur n'a pas signé, devenir agent libre
                 makeUserFreeAgent(userId);
 
                 // Marquer les offres comme expirées
-                Main.getMongoConnection().getDatabase().getCollection("contractOffers").updateOne(
+                Main.getMongoConnection().getDatabase().getCollection("contract_offers").updateOne(
                         new Document("_id", pendingOffers.getObjectId("_id")),
                         new Document("$set", new Document("status", "expired")));
 
@@ -688,19 +682,24 @@ public class ContractManager extends ListenerAdapter {
 
     /**
      * Traite l'interaction avec un bouton de contrat.
-     * @param event L'événement d'interaction avec le bouton
+     * @param e L'événement d'interaction avec le bouton
      */
-    public void handleContractButtonInteraction(ButtonInteractionEvent event) {
-        String[] buttonData = event.getComponentId().split("_", 2);
+    public void handleContractButtonInteraction(ButtonInteractionEvent e) {
+        String[] buttonData = e.getComponentId().split("_", 2);
         if (buttonData.length < 2) return;
         String action = buttonData[0];
         String value = buttonData[1];
         if (action.equals("contract")) {
+            Document offersDoc = Main.getMongoConnection().getDatabase().getCollection("contract_offers").find(new Document("userId", e.getUser().getId()).append("status", "pending")).first();
+            if (offersDoc == null) {
+                e.reply("Aucune offre de contrat en attente n'a été trouvée.").setEphemeral(true).queue();
+                return;
+            }
             if (value.equals("decline")) {
-                makeUserFreeAgent(event.getUser().getId());
-                event.reply("Vous avez refusé toutes les offres. Vous êtes maintenant un agent libre.").queue();
+                makeUserFreeAgent(e.getUser().getId());
+                e.reply("Vous avez refusé toutes les offres. Vous êtes maintenant un agent libre.").queue();
             } else {
-                signContractWithTeam(event.getUser().getId(), value, event);
+                signContractWithTeam(e.getUser().getId(), value, e, offersDoc);
             }
         }
     }
@@ -709,16 +708,9 @@ public class ContractManager extends ListenerAdapter {
      * Signe un contrat avec une équipe spécifique.
      * @param userId ID de l'utilisateur
      * @param teamName Nom de l'équipe
-     * @param event Événement d'interaction pour répondre
+     * @param e Événement d'interaction pour répondre
      */
-    private void signContractWithTeam(String userId, String teamName, ButtonInteractionEvent event) {
-        Document offersDoc = Main.getMongoConnection().getDatabase().getCollection("contractOffers")
-                .find(new Document("userId", userId).append("status", "pending"))
-                .first();
-        if (offersDoc == null) {
-            event.reply("Aucune offre de contrat en attente n'a été trouvée.").setEphemeral(true).queue();
-            return;
-        }
+    private void signContractWithTeam(String userId, String teamName, ButtonInteractionEvent e, Document offersDoc) {
         List<Document> offers = offersDoc.getList("offers", Document.class);
         Document selectedOffer = null;
         for (Document offer : offers) {
@@ -728,7 +720,7 @@ public class ContractManager extends ListenerAdapter {
             }
         }
         if (selectedOffer == null) {
-            event.reply("Cette offre n'est plus disponible.").setEphemeral(true).queue();
+            e.reply("Cette offre n'est plus disponible.").setEphemeral(true).queue();
             return;
         }
 
@@ -742,44 +734,354 @@ public class ContractManager extends ListenerAdapter {
         String nmcDetails = selectedOffer.getString("nmcDetails") != null ? selectedOffer.getString("nmcDetails") : "";
 
         // Créer le contrat avec la fonction générique
-        Document contract = generateContract(
-                userId,
-                teamName,
-                (int)(salaryInMillions * 1000000), // Convertir en dollars
-                years,
-                contractType,
-                hasNTC,
-                hasNMC,
-                ntcDetails,
-                nmcDetails
-        );
+        Document contract = generateContract(userId, teamName, (int)(salaryInMillions * 1000000), years, contractType, hasNTC, hasNMC, ntcDetails, nmcDetails);
 
-        // Marquer les offres comme acceptées
-        Main.getMongoConnection().getDatabase().getCollection("contractOffers").updateOne(
-                new Document("_id", offersDoc.getObjectId("_id")),
+        // Marquer toutes les offres comme acceptées pour cet utilisateur
+        Main.getMongoConnection().getDatabase().getCollection("contract_offers").updateMany(
+                new Document("userId", userId).append("status", "pending"),
                 new Document("$set", new Document("status", "accepted")
                         .append("acceptedTeam", teamName)));
 
-        // Répondre à l'utilisateur
-        SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.FRENCH);
+        updateUserContract(userId, contract);
+        updateUserTeam(userId, teamName);
 
-        StringBuilder clausesText = new StringBuilder();
-        if (hasNTC || hasNMC) {
-            clausesText.append(" avec les clauses suivantes:\n");
-            if (hasNTC && hasNMC) {
-                clausesText.append("- NTC + NMC\n");
-                clausesText.append("  • NTC : ").append(ntcDetails).append("\n");
-                clausesText.append("  • NMC : ").append(nmcDetails);
-            } else if (hasNTC) {
-                clausesText.append("- NTC : ").append(ntcDetails);
-            } else {
-                clausesText.append("- NMC : ").append(nmcDetails);
+        try {
+            // Générer l'image de confirmation de signature
+            BufferedImage signedImage = generateContractSignedImage(
+                    teamName,
+                    years,
+                    salaryInMillions,
+                    contractType,
+                    hasNTC,
+                    hasNMC,
+                    ntcDetails,
+                    nmcDetails,
+                    contract.getDate("expiryDate")
+            );
+
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            ImageIO.write(signedImage, "png", outputStream);
+
+            // Répondre avec l'image et un message court
+            e.reply("🎉 Félicitations ! Votre contrat a été signé.")
+                    .addFiles(FileUpload.fromData(outputStream.toByteArray(), "contract_signed.png"))
+                    .queue();
+        } catch (Exception ex) {
+            SimpleDateFormat dateFormat = new SimpleDateFormat("d MMMM yyyy", Locale.CANADA_FRENCH);
+            e.reply("🎉 Félicitations ! Vous avez signé un contrat de " + years + " an" + (years > 1 ? "s" : "") +
+                    " avec " + teamName + " pour un salaire annuel de " + getSalaryFormat(salaryInMillions) + "." +
+                    "\nLe contrat expire le " + dateFormat.format(contract.getDate("expiryDate")) + ".").queue();
+        }
+    }
+
+    /**
+     * Génère une image de confirmation de signature de contrat.
+     * @param teamName Nom de l'équipe
+     * @param years Durée du contrat en années
+     * @param salary Salaire annuel
+     * @param contractType Type de contrat
+     * @param hasNTC Si le contrat a une clause NTC
+     * @param hasNMC Si le contrat a une clause NMC
+     * @param ntcDetails Détails de la clause NTC
+     * @param nmcDetails Détails de la clause NMC
+     * @param expiryDate Date d'expiration du contrat
+     * @return Image BufferedImage de confirmation
+     */
+    private BufferedImage generateContractSignedImage(String teamName, int years, double salary,
+                                                      String contractType, boolean hasNTC, boolean hasNMC,
+                                                      String ntcDetails, String nmcDetails, Date expiryDate) {
+        // Dimensions ajustées pour correspondre à la taille d'une offre dans generateContractOffersImage
+        int width = 370; // Largeur d'une offre individuelle
+        int height = 520; // Hauteur identique aux offres
+        int padding = 15;
+
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g2d = image.createGraphics();
+
+        // Configuration de l'antialiasing
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+        // Fond noir pour l'image
+        g2d.setColor(new Color(5, 5, 5));
+        g2d.fillRect(0, 0, width, height);
+
+        // Récupérer les données de l'équipe
+        Document teamData = Main.getTeamManager().getTeamByName(teamName);
+        Color teamColor = Color.GRAY;
+        if (teamData != null && teamData.containsKey("color")) {
+            String colorHex = teamData.getString("color");
+            if (colorHex != null && !colorHex.isEmpty()) {
+                teamColor = Color.decode(colorHex);
             }
         }
 
-        event.reply("🎉 Félicitations ! Vous avez signé un contrat de " + years + " ans avec " + teamName +
-                " pour un salaire annuel de $" + String.format("%.2fM", salaryInMillions) + clausesText + "." +
-                "\nLe contrat expire le " + dateFormat.format(contract.getDate("expiryDate")) + ".").queue();
+        // Zone rectangulaire en haut pour l'équipe (180px comme dans les offres)
+        g2d.setColor(teamColor);
+        g2d.fillRect(0, 0, width, 180);
+
+        // Ajout du watermark de l'équipe derrière le logo
+        try {
+            if (teamData != null && teamData.containsKey("logo")) {
+                String logoPath = teamData.getString("logo");
+                if (logoPath != null && !logoPath.isEmpty()) {
+                    BufferedImage watermarkLogo = ImageUtils.loadImage(logoPath, 250);
+                    AlphaComposite alphaChannel = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.15f);
+                    Composite originalComposite = g2d.getComposite();
+                    g2d.setComposite(alphaChannel);
+                    g2d.drawImage(watermarkLogo, (width - 250) / 2, (180 - 250) / 2, 250, 250, null);
+                    g2d.setComposite(originalComposite);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Erreur lors du chargement du watermark: " + e.getMessage());
+        }
+
+        // Affichage du logo de l'équipe (125px comme dans les offres)
+        try {
+            if (teamData != null && teamData.containsKey("logo")) {
+                String logoPath = teamData.getString("logo");
+                if (logoPath != null && !logoPath.isEmpty()) {
+                    BufferedImage logo = ImageUtils.loadImage(logoPath, 125);
+                    g2d.drawImage(logo, (width - 125) / 2, padding + 25, 125, 125, null);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Erreur lors du chargement du logo de l'équipe: " + e.getMessage());
+        }
+
+        // Appliquer le dégradé à partir du bas du header jusqu'en bas
+        int gradientStartY = 180;
+        int gradientHeight = height - gradientStartY;
+
+        // Créer et appliquer le dégradé de la couleur de l'équipe vers noir
+        Color darkerTeamColor = getDarkerColor(teamColor);
+        Color veryDarkColor = new Color(10, 10, 10);
+        GradientPaint gradientPaint = new GradientPaint(0, gradientStartY, darkerTeamColor, 0, height, veryDarkColor);
+
+        Paint originalPaint = g2d.getPaint();
+        g2d.setPaint(gradientPaint);
+        g2d.fillRect(0, gradientStartY, width, gradientHeight);
+        g2d.setPaint(originalPaint);
+
+        // Nom de l'équipe
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Arial", Font.BOLD, 20));
+        FontMetrics fm = g2d.getFontMetrics();
+        int textWidth = fm.stringWidth(teamName);
+        g2d.drawString(teamName, (width - textWidth) / 2, gradientStartY + 30);
+
+        // Ligne séparatrice
+        g2d.setColor(new Color(40, 40, 40));
+        g2d.fillRect(padding + 15, gradientStartY + 40, width - (padding * 2) - 30, 1);
+
+        // Détails du contrat - en respectant le style des offres
+        int detailsBaseY = gradientStartY + 70;
+        int rowHeight = 45; // Même espacement que dans les offres
+        int labelX = padding + 15;
+        int valueX = width - padding - 15;
+
+        // Durée (sans deux-points)
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Arial", Font.BOLD, 18));
+        g2d.drawString("Durée", labelX, detailsBaseY);
+        String yearsText = years + " an" + (years > 1 ? "s" : "");
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Arial", Font.BOLD, 20));
+        fm = g2d.getFontMetrics();
+        textWidth = fm.stringWidth(yearsText);
+        g2d.drawString(yearsText, valueX - textWidth, detailsBaseY);
+
+        // Salaire (sans deux-points)
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Arial", Font.BOLD, 18));
+        g2d.drawString("Salaire annuel", labelX, detailsBaseY + rowHeight);
+        String salaryText = getSalaryFormat(salary);
+        g2d.setColor(new Color(100, 255, 100)); // Vert pour l'argent
+        g2d.setFont(new Font("Arial", Font.BOLD, 20));
+        fm = g2d.getFontMetrics();
+        textWidth = fm.stringWidth(salaryText);
+        g2d.drawString(salaryText, valueX - textWidth, detailsBaseY + rowHeight);
+
+        // Type de contrat (sans deux-points)
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Arial", Font.BOLD, 18));
+        g2d.drawString("Type", labelX, detailsBaseY + 2 * rowHeight);
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Arial", Font.BOLD, 20));
+        fm = g2d.getFontMetrics();
+        textWidth = fm.stringWidth(contractType);
+        g2d.drawString(contractType, valueX - textWidth, detailsBaseY + 2 * rowHeight);
+
+        // Date d'expiration (sans deux-points)
+        SimpleDateFormat dateFormat = new SimpleDateFormat("d MMMM yyyy", Locale.CANADA_FRENCH);
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Arial", Font.BOLD, 18));
+        g2d.drawString("Expire le", labelX, detailsBaseY + 3 * rowHeight);
+        String expiryDateText = dateFormat.format(expiryDate);
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Arial", Font.BOLD, 20));
+        fm = g2d.getFontMetrics();
+        textWidth = fm.stringWidth(expiryDateText);
+        g2d.drawString(expiryDateText, valueX - textWidth, detailsBaseY + 3 * rowHeight);
+
+        // Calculer la position de la signature en fonction des clauses
+        int signatureY;
+
+        // Ajout des clauses si présentes - avec le même style que dans les offres
+        int clausesBaseY = detailsBaseY + 3 * rowHeight + 30;
+        int clauseIndent = 15; // Indentation pour les éléments de la liste
+        int clauseSpacing = 25; // Espacement entre les clauses
+
+        if (hasNTC || hasNMC) {
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("Arial", Font.BOLD, 18));
+            g2d.drawString("Clauses", labelX, clausesBaseY);
+
+            // NTC
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("Arial", Font.PLAIN, 16));
+            g2d.drawString("•", labelX + 3, clausesBaseY + 30);
+
+            g2d.setColor(new Color(255, 180, 50)); // Orange pour NTC
+            g2d.setFont(new Font("Arial", Font.BOLD, 16));
+            g2d.drawString("NTC", labelX + clauseIndent, clausesBaseY + 30);
+
+            // Détails NTC
+            g2d.setColor(Color.WHITE);
+            if (hasNTC) {
+                g2d.setFont(new Font("Arial", Font.BOLD, 16));
+                g2d.drawString(": " + ntcDetails, labelX + clauseIndent + 40, clausesBaseY + 30);
+            } else {
+                FontUtils.drawMixedEmojiText(g2d, ": Aucune", labelX + clauseIndent + 40, clausesBaseY + 30, 16, new Font("Arial", Font.BOLD, 16), Color.WHITE);
+            }
+
+            // NMC
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font("Arial", Font.PLAIN, 16));
+            g2d.drawString("•", labelX + 3, clausesBaseY + 30 + clauseSpacing);
+
+            g2d.setColor(new Color(50, 180, 255)); // Bleu pour NMC
+            g2d.setFont(new Font("Arial", Font.BOLD, 16));
+            g2d.drawString("NMC", labelX + clauseIndent, clausesBaseY + 30 + clauseSpacing);
+
+            // Détails NMC
+            g2d.setColor(Color.WHITE);
+            if (hasNMC) {
+                g2d.setFont(new Font("Arial", Font.BOLD, 16));
+                g2d.drawString(": " + nmcDetails, labelX + clauseIndent + 40, clausesBaseY + 30 + clauseSpacing);
+            } else {
+                FontUtils.drawMixedEmojiText(g2d, ": Aucune", labelX + clauseIndent + 40, clausesBaseY + 30 + clauseSpacing, 16, new Font("Arial", Font.BOLD, 16), Color.WHITE);
+            }
+
+            // Position de la signature si des clauses sont présentes
+            signatureY = clausesBaseY + 30 + clauseSpacing * 2 + 20;
+        } else {
+            // Position de la signature s'il n'y a pas de clauses
+            signatureY = clausesBaseY + 20;
+        }
+
+        // S'assurer que la signature ne dépasse pas de l'image
+        if (signatureY > height - 60) {
+            signatureY = height - 60;
+        }
+
+        // Signature améliorée
+        try {
+            int sigWidth = 120;
+            int sigHeight = 80;
+            BufferedImage signatureImg = getRandomSignature(sigHeight, sigWidth);
+            g2d.drawImage(signatureImg, (width - sigWidth) / 2, signatureY, sigWidth, sigHeight, null);
+        } catch (Exception e) {
+            drawHandwrittenSignature(g2d, width, signatureY);
+        }
+
+        // Bordure externe
+        g2d.setColor(new Color(40, 40, 40));
+        g2d.setStroke(new BasicStroke(2.0f));
+        g2d.drawRect(0, 0, width - 1, height - 1);
+
+        g2d.dispose();
+        return image;
+    }
+
+    private BufferedImage getRandomSignature(int height, int width) throws IOException {
+        List<String> signatures = Arrays.asList("Arthur_Stanton", "Chantal_Arens", "Christo", "Damien_Chazelle", "Damodar_Rao");
+        Collections.shuffle(signatures);
+
+        // Charger le SVG original
+        BufferedImage originalSignature = ImageUtils.loadSVG("https://static.wunryze.com/files/signatures/" + signatures.getFirst() + ".svg", height, width);
+
+        // Créer une nouvelle image avec fond transparent
+        BufferedImage whiteSignature = new BufferedImage(originalSignature.getWidth(), originalSignature.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2d = whiteSignature.createGraphics();
+
+        // Appliquer le filtre pour transformer en blanc
+        for (int x = 0; x < originalSignature.getWidth(); x++) {
+            for (int y = 0; y < originalSignature.getHeight(); y++) {
+                Color pixelColor = new Color(originalSignature.getRGB(x, y), true);
+
+                // Si le pixel n'est pas transparent (il fait partie de la signature)
+                if (pixelColor.getAlpha() > 0) {
+                    // Conserver l'alpha (transparence) mais remplacer la couleur par du blanc
+                    int alpha = pixelColor.getAlpha();
+                    // Créer un nouveau pixel blanc avec la même transparence
+                    Color whitePixel = new Color(255, 255, 255, alpha);
+                    whiteSignature.setRGB(x, y, whitePixel.getRGB());
+                }
+            }
+        }
+
+        g2d.dispose();
+        return whiteSignature;
+    }
+
+    // Nouvelle méthode pour dessiner une signature manuscrite réaliste
+    private void drawHandwrittenSignature(Graphics2D g2d, int width, int signatureY) {
+        g2d.setColor(new Color(220, 220, 220)); // Couleur plus claire pour la signature
+        g2d.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+
+        int centerX = width / 2;
+        int signatureWidth = 140;
+        int startX = centerX - (signatureWidth / 2);
+
+        GeneralPath signature = new GeneralPath();
+
+        // Première lettre stylisée
+        signature.moveTo(startX, signatureY);
+        signature.curveTo(
+                startX + 10, signatureY - 15,
+                startX + 20, signatureY - 20,
+                startX + 30, signatureY - 10
+        );
+        signature.curveTo(
+                startX + 40, signatureY,
+                startX + 30, signatureY + 10,
+                startX + 40, signatureY + 5
+        );
+
+        // Transition à la deuxième lettre
+        signature.curveTo(
+                startX + 50, signatureY,
+                startX + 60, signatureY - 5,
+                startX + 70, signatureY - 8
+        );
+
+        // Deuxième lettre
+        signature.curveTo(
+                startX + 80, signatureY - 10,
+                startX + 90, signatureY,
+                startX + 100, signatureY + 5
+        );
+
+        // Trait final
+        signature.curveTo(
+                startX + 120, signatureY,
+                startX + 130, signatureY - 5,
+                startX + signatureWidth, signatureY - 8
+        );
+
+        g2d.draw(signature);
     }
 
     /**
@@ -814,6 +1116,10 @@ public class ContractManager extends ListenerAdapter {
             selectedTeams.add(availableTeams.remove(index));
         }
         return selectedTeams;
+    }
+
+    public String getSalaryFormat(double salary) {
+        return String.format("%.2fM $", salary);
     }
 
     /**
